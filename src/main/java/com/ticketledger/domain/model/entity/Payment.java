@@ -1,0 +1,64 @@
+package com.ticketledger.domain.model.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.*;
+import org.hibernate.type.SqlTypes;
+
+import java.math.*;
+import java.time.*;
+import java.util.*;
+
+import com.ticketledger.domain.model.enums.PaymentStatus;
+
+/**
+ * Represents a payment transaction for a booking.
+ */
+@Entity
+@Table(name = "payments")
+@Getter
+@Setter
+@NoArgsConstructor
+public class Payment {
+
+    @Id
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "booking_id", nullable = false)
+    private Booking booking;
+
+    @Column(nullable = false, precision = 10, scale = 2)
+    private BigDecimal amount;
+
+    @Column(length = 3)
+    private String currency = "USD";
+
+    @Column(nullable = false, length = 50)
+    private String provider;
+
+    @Column(length = 50)
+    private String method;
+
+    @Enumerated(EnumType.STRING)
+    @Column(columnDefinition = "payment_status")
+    private PaymentStatus status = PaymentStatus.PENDING;
+
+    @Column(name = "provider_transaction_id", length = 255)
+    private String providerTransactionId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "provider_response", columnDefinition = "jsonb")
+    private Map<String, Object> providerResponse;
+
+    @Column(name = "provider_captured_at")
+    private Instant providerCapturedAt;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+}
