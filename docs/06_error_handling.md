@@ -287,6 +287,12 @@ Business rule violations or invalid requests.
 
 ## 🌍 Localization Strategy
 
+> **📌 NON-NORMATIVE SECTION**
+>
+> This section describes the recommended localization approach but is **not binding for backend implementation**.
+>
+> The backend provides English messages and machine-readable codes. Frontend localization is optional and outside the scope of backend contracts.
+
 ### Backend Responsibility
 - Returns **machine-readable** `error.code`
 - Provides **English** `error.message` as fallback
@@ -353,6 +359,46 @@ function getLocalizedError(error, locale = 'en') {
 ### Purpose of `context` Field
 
 The `context` object provides **additional data** to help users/frontend understand and resolve the error.
+
+### ⚠️ Security: Strictly Limit Context Contents
+
+**CRITICAL: The `context` field MUST NEVER contain:**
+- ❌ **PII (Personal Identifiable Information):** Full names, phone numbers, addresses, SSNs
+- ❌ **Stack traces:** Internal code paths, class names, line numbers
+- ❌ **Database details:** Table names, column names, SQL queries
+- ❌ **Authentication tokens:** JWTs, API keys, session IDs
+- ❌ **Payment details:** Full card numbers, CVVs, bank account numbers
+- ❌ **Internal IDs exposed to enumeration:** Use UUIDs only, never sequential IDs
+- ❌ **System paths:** File paths, server names, internal URLs
+
+**Allowed in `context`:**
+- ✅ Public resource identifiers (UUIDs)
+- ✅ Business rule parameters (maxSeats, minHours)
+- ✅ Counts and aggregates (availableSeats, totalBookings)
+- ✅ Sanitized timing information (ISO-8601 timestamps)
+- ✅ Enum values (status codes, categories)
+
+**Example - BAD (Security Violation):**
+```json
+// ❌ NEVER DO THIS
+"context": {
+  "userEmail": "john@example.com",  // PII leak
+  "stackTrace": "at com.ticketledger.BookingService.reserve(BookingService.java:123)",  // Internal details
+  "dbQuery": "SELECT * FROM users WHERE id = 123",  // SQL injection risk
+  "jwtToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."  // Auth leak
+}
+```
+
+**Example - GOOD (Secure):**
+```json
+// ✅ Safe context
+"context": {
+  "bookingId": "019535d9-3df7-79fb-b466-fa907fa17f9e",  // UUID is safe
+  "availableSeats": 43,  // Aggregate is safe
+  "minHoursRequired": 3,  // Business rule is safe
+  "currentStatus": "HELD"  // Enum is safe
+}
+```
 
 ### Common Context Patterns
 
@@ -509,6 +555,14 @@ The `context` object provides **additional data** to help users/frontend underst
 ---
 
 ## 🎯 Frontend Error Handling Guidelines
+
+> **📌 NON-NORMATIVE SECTION**
+>
+> This section is provided **FOR CONTEXT ONLY** to help frontend developers understand how to consume the backend error API.
+>
+> **Backend developers:** Do NOT let frontend concerns dictate your error schema design. The backend error format (code, message, context) is the contract. How the frontend consumes it is their responsibility.
+>
+> **This section is not binding for backend implementation.**
 
 ### 1. Error Categorization
 

@@ -60,6 +60,34 @@ This document defines the **allowed and denied state transitions** for all entit
 
 ## 🪑 Seat Transitions
 
+### 🎯 Architecture: Seat Status as Locking Mechanism
+
+**Critical Design Decision:**
+
+`seats.status` is a **Materialized Lock State**, NOT the source of truth.
+
+- **Source of Truth:** `bookings.status` (financial ledger)
+- **Locking Mechanism:** `seats.status` (concurrency optimization)
+
+**Why This Matters:**
+
+Updating `seats.status` IS the locking mechanism. All seat transitions MUST occur within the same transaction as booking transitions to maintain consistency.
+
+**Transaction Atomicity Rule:**
+```sql
+BEGIN TRANSACTION;
+  -- Step 1: Lock the seat (this is the lock acquisition)
+  UPDATE seats SET status = 'HELD' WHERE id = ? AND status = 'AVAILABLE';
+  
+  -- Step 2: Record the financial intent
+  INSERT INTO bookings (status, ...) VALUES ('HELD', ...);
+COMMIT;
+```
+
+If these operations are not atomic, you risk:
+- Orphaned seat locks (seat HELD, no booking exists)
+- Double bookings (booking exists, seat shows AVAILABLE)
+
 ### ✅ Allowed Transitions
 
 ```mermaid
@@ -76,9 +104,9 @@ graph LR
 
 | From        | To          | Trigger                                         |
 | ----------- | ----------- | ----------------------------------------------- |
-| `AVAILABLE` | `HELD`      | User initiates booking                          |
-| `HELD`      | `AVAILABLE` | Hold expires or released                        |
-| `HELD`      | `SOLD`      | Payment confirmed                               |
+| `AVAILABLE` | `HELD`      | User initiates booking (with booking INSERT)    |
+| `HELD`      | `AVAILABLE` | Hold expires or released (with booking UPDATE)  |
+| `HELD`      | `SOLD`      | Payment confirmed (with booking UPDATE)         |
 | `SOLD`      | `AVAILABLE` | Booking cancelled (via `CONFIRMED → CANCELLED`) |
 
 ### ❌ Denied Transitions
@@ -219,11 +247,13 @@ graph LR
 
 ### 📐 Constraint Rules
 
-1. **Atomic Coupling**: Seat transitions must occur within the same transaction as Booking transitions
+1. **Atomic Coupling**: Seat transitions MUST occur within the same transaction as Booking transitions (seats.status is the lock, bookings.status is the truth)
 2. **Showtime Guard**: No seat reservations allowed when showtime is not `ACTIVE`
 3. **Payment Prerequisite**: Booking confirmation requires successful payment
 4. **Cascade Cleanup**: Booking state changes automatically trigger dependent seat state changes
 5. **Terminal Barriers**: Inactive showtimes block all new booking attempts
+6. **Lock-Then-Record**: Always UPDATE seats.status BEFORE INSERT/UPDATE bookings (acquire lock, then record intent)
+7. **Corruption Resolution**: If seats.status conflicts with bookings.status, bookings.status is the source of truth for reconciliation
 
 ---
 

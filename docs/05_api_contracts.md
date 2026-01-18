@@ -311,7 +311,102 @@ Content-Type: application/json
 
 ---
 
-### 2. Confirm Booking (Manual Sync)
+### 2. Retry Payment for Existing Booking
+
+**Endpoint:** `POST /bookings/{bookingId}/payment-intents`
+
+**Purpose:** Initiate a new payment attempt for an existing HELD booking without losing the seat hold
+
+**Why Needed:** Handles payment retry scenarios when:
+- Initial payment card is declined
+- User wants to try a different payment method
+- Booking is still HELD (within 10-minute window)
+
+**Headers:**
+```http
+Authorization: Bearer {jwt_token}
+Idempotency-Key: {uuid}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "paymentMethod": "CARD"  // Optional: For analytics
+}
+```
+
+**Success Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": {
+    "bookingId": "booking-uuid-123",
+    "status": "HELD",
+    "expiresAt": "2026-01-18T10:40:00Z",
+    "payment": {
+      "paymentId": "payment-uuid-789",
+      "provider": "STRIPE",
+      "clientSecret": "pi_3DEF456_secret_ABC",
+      "redirectUrl": "https://checkout.stripe.com/pay/cs_test_def456",
+      "attemptNumber": 2
+    }
+  },
+  "meta": {
+    "timestamp": "2026-01-18T10:33:00Z",
+    "requestId": "req-retry-001"
+  }
+}
+```
+
+**Response Schema:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `payment.paymentId` | `string (UUID)` | New payment record identifier |
+| `payment.attemptNumber` | `integer` | Payment attempt counter (for analytics) |
+| `expiresAt` | `ISO-8601` | Original hold expiry (not extended on retry) |
+
+**Business Rules:**
+- Creates a new `payments` row (allowing 1:N relationship)
+- Does NOT extend the `locked_until` timestamp
+- Booking remains `HELD` while payment is `PENDING`
+- If previous payment was `PENDING`, mark it `FAILED` first
+- Maximum 3 payment attempts per booking
+
+**Error Responses:**
+
+| Status | Error Code | Description |
+|--------|------------|-------------|
+| `400` | `BOOKING_EXPIRED` | Hold window expired, seats released |
+| `400` | `INVALID_BOOKING_STATUS` | Booking not in HELD state |
+| `400` | `MAX_PAYMENT_ATTEMPTS` | Exceeded 3 payment attempts |
+| `404` | `BOOKING_NOT_FOUND` | Invalid booking ID |
+| `409` | `PAYMENT_IN_PROGRESS` | Previous payment still PENDING |
+
+**Example Error:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "MAX_PAYMENT_ATTEMPTS",
+    "message": "Maximum payment attempts exceeded for this booking.",
+    "context": {
+      "bookingId": "booking-uuid-123",
+      "attemptsMade": 3,
+      "maxAttempts": 3
+    },
+    "requestId": "req-retry-002"
+  },
+  "meta": {
+    "timestamp": "2026-01-18T10:35:00Z"
+  }
+}
+```
+
+---
+
+### 3. Confirm Booking (Manual Sync)
 
 **Endpoint:** `POST /bookings/{bookingId}/confirm`
 

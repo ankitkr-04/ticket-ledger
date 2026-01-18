@@ -159,6 +159,25 @@ CREATE TYPE user_role AS ENUM ('CUSTOMER', 'ADMIN');
 ```sql
 CREATE TYPE seat_status AS ENUM ('AVAILABLE', 'HELD', 'SOLD');
 ```
+
+**Architecture Note: Seat Status as Materialized Lock State**
+
+`seats.status` is a **materialized lock state** optimized for concurrency, while `bookings.status` is the **financial ledger and source of truth**.
+
+**Single Source of Truth Hierarchy:**
+1. **Primary Truth:** `bookings.status` (financial ledger, immutable intent)
+2. **Derived State:** `seats.status` (database lock mechanism, performance optimization)
+
+**Relationship:**
+- `seats.status` MUST always be updated within the same transaction as `bookings.status`
+- In case of data corruption, `bookings.status` takes precedence
+- `seats.status` enables efficient `SELECT ... FOR UPDATE` locking without joining to bookings
+
+**Why Separate Tables:**
+- Performance: Lock seats without scanning bookings table
+- Concurrency: `FOR UPDATE` on seats table reduces lock contention
+- Query Efficiency: "Show available seats" is a simple index scan
+
 | Value | Description | State Machine |
 |-------|-------------|---------------|
 | `AVAILABLE` | Free for booking | Initial state |

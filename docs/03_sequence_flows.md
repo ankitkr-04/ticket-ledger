@@ -21,11 +21,13 @@ This document defines the **end-to-end transaction flows** for TicketLedger. Eac
 
 ## 🎯 Flow Categories
 
-| Category             | Flows      | Trigger Type              |
-| -------------------- | ---------- | ------------------------- |
-| **Core Transaction** | A, B, C, D | User API + Webhook + Cron |
-| **Refund & Cleanup** | E, F       | User API + Cron           |
-| **Error Handling**   | G          | System Exception          |
+| Category             | Flows        | Trigger Type              |
+| -------------------- | ------------ | ------------------------- |
+| **Core Transaction** | A, A.1, B, C | User API + Webhook + Cron |
+| **Background Jobs**  | D, F         | Cron                      |
+| **Refund & Cleanup** | E            | User API                  |
+| **Error Handling**   | G            | System Exception          |
+| **Concurrency**      | H            | Concurrent Requests       |
 
 ---
 
@@ -33,7 +35,7 @@ This document defines the **end-to-end transaction flows** for TicketLedger. Eac
 
 ### Flow A: Reserve Seats (The Initiation)
 
-**Trigger:** `POST /bookings/reserve`
+**Trigger:** `POST /bookings`
 
 **Input:**
 ```json
@@ -44,6 +46,8 @@ This document defines the **end-to-end transaction flows** for TicketLedger. Eac
 }
 ```
 
+**Purpose:** Lock seats, create booking with HELD status, initiate FIRST payment attempt
+
 **Sequence:**
 
 ```mermaid
@@ -53,7 +57,7 @@ sequenceDiagram
     participant DB
     participant PaymentGateway
 
-    User->>API: POST /bookings/reserve
+    User->>API: POST /bookings
     API->>API: Validate User & Limits
     API->>API: Sort seatIds (Deadlock Prevention)
     API->>DB: BEGIN TRANSACTION
@@ -61,12 +65,12 @@ sequenceDiagram
     
     alt Seats Available
         API->>DB: Verify Showtime == ACTIVE
-        API->>DB: INSERT Booking (HELD)
         API->>DB: UPDATE Seats → HELD
-        API->>DB: INSERT Payment (PENDING)
+        API->>DB: INSERT Booking (HELD)
+        API->>DB: INSERT Payment (PENDING, attempt=1)
         API->>DB: COMMIT
         API->>PaymentGateway: Initiate Payment Session
-        API-->>User: 200 OK (bookingId, paymentId, paymentUrl)
+        API-->>User: 201 Created (bookingId, paymentId, paymentUrl)
     else Seats Unavailable
         API->>DB: ROLLBACK
         API-->>User: 409 Conflict
@@ -77,9 +81,9 @@ sequenceDiagram
 - **START:** `BEGIN TRANSACTION`
 - **LOCKS:** `SELECT ... FOR UPDATE` on `seats` table (sorted by `seat_id`)
 - **WRITES:**
-  1. `INSERT INTO bookings` (`status = HELD`, `locked_until = now() + 10 min`)
-  2. `UPDATE seats SET status = HELD`
-  3. `INSERT INTO payments` (`status = PENDING`)
+  1. `UPDATE seats SET status = HELD` (Lock Acquisition - FIRST)
+  2. `INSERT INTO bookings` (`status = HELD`, `locked_until = now() + 10 min`)
+  3. `INSERT INTO payments` (`status = PENDING`, `attempt_number = 1`)
 - **END:** `COMMIT` or `ROLLBACK`
 
 **Validations:**
@@ -91,6 +95,83 @@ sequenceDiagram
 **Outcome:**
 - ✅ **Success:** Returns `bookingId`, `paymentId`, and `paymentUrl`
 - ❌ **Failure:** `409 Conflict` (seats taken) or `400 Bad Request` (validation failure)
+
+**Note:** If payment fails, user can retry via Flow A.1 without losing seat hold (if within 10 min window).
+
+---
+
+### Flow A.1: Retry Payment (The Retry)
+
+**Trigger:** `POST /bookings/{id}/payment-intents`
+
+**Input:**
+```json
+{
+  "bookingId": "booking-uuid-123"
+}
+```
+
+**Purpose:** Initiate NEW payment attempt for existing HELD booking after initial payment failure
+
+**Business Context:**
+- User reserved seats (Flow A)
+- First payment attempt failed (card declined)
+- Booking still HELD (within 10-minute window)
+- User wants to try different payment method
+
+**Sequence:**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant API
+    participant DB
+    participant PaymentGateway
+
+    User->>API: POST /bookings/{id}/payment-intents
+    API->>DB: BEGIN TRANSACTION
+    API->>DB: SELECT booking, payments FOR UPDATE
+    
+    alt Booking == HELD && within timeout
+        alt Payment attempts < 3
+            API->>DB: UPDATE previous payment → FAILED (if PENDING)
+            API->>DB: INSERT new Payment (PENDING, attempt=N+1)
+            API->>DB: COMMIT
+            API->>PaymentGateway: Initiate New Payment Session
+            API-->>User: 201 Created (new paymentId, paymentUrl)
+        else Max attempts reached
+            API->>DB: ROLLBACK
+            API-->>User: 400 MAX_PAYMENT_ATTEMPTS
+        end
+    else Booking EXPIRED or not HELD
+        API->>DB: ROLLBACK
+        API-->>User: 400 BOOKING_EXPIRED
+    end
+```
+
+**Transaction Boundary:**
+- **START:** `BEGIN TRANSACTION`
+- **LOCKS:** `SELECT ... FOR UPDATE` on `bookings` and `payments`
+- **WRITES:**
+  1. `UPDATE payments SET status = FAILED WHERE booking_id = ? AND status = PENDING`
+  2. `INSERT INTO payments` (`status = PENDING`, `attempt_number = attempt_number + 1`)
+- **END:** `COMMIT` or `ROLLBACK`
+
+**Business Rules:**
+- Maximum 3 payment attempts per booking
+- Does NOT extend `locked_until` timestamp (original 10-min window remains)
+- Only allowed when booking is `HELD`
+- Seats remain locked during retry
+
+**Key Difference from Flow A:**
+- Flow A: Creates booking + first payment
+- Flow A.1: Creates additional payment for existing booking
+- Database supports 1:N relationship (bookings → payments)
+
+**Outcome:**
+- ✅ **Success:** New payment initiated, user redirected to payment gateway
+- ❌ **Expired:** `400 BOOKING_EXPIRED` - seats already released
+- ❌ **Max Attempts:** `400 MAX_PAYMENT_ATTEMPTS` - user must create new booking
 
 ---
 
@@ -492,17 +573,197 @@ log.error("Booking reservation failed",
 
 ---
 
+## � Concurrency Control Flows
+
+### Flow H: Concurrent Seat Reservation (The Race Condition)
+
+**Trigger:** Two users attempt to book the same seat(s) simultaneously
+
+**Purpose:** Demonstrate database-level locking prevents double-booking
+
+**Business Context:**
+- **The Interview Question:** "How do you handle two users booking the same seat at the exact same time?"
+- **The Answer:** Database pessimistic locking with sorted lock acquisition prevents deadlocks
+
+**Scenario:** User A and User B both try to book Seat A1 at 10:30:00.000
+
+**Sequence:**
+
+```mermaid
+sequenceDiagram
+    participant UserA
+    participant RequestA
+    participant DB
+    participant RequestB
+    participant UserB
+
+    Note over UserA,UserB: Both click "Reserve" at the same time
+    
+    par Concurrent Requests
+        UserA->>RequestA: POST /bookings (A1, A2)
+        UserB->>RequestB: POST /bookings (A1, A3)
+    end
+    
+    RequestA->>DB: BEGIN TRANSACTION
+    RequestB->>DB: BEGIN TRANSACTION
+    
+    Note over RequestA,RequestB: Both sort seat IDs: [A1, A2] vs [A1, A3]
+    
+    RequestA->>DB: SELECT * FROM seats<br/>WHERE id IN ('A1','A2')<br/>FOR UPDATE
+    Note over DB: Request A acquires lock on A1, A2
+    
+    RequestB->>DB: SELECT * FROM seats<br/>WHERE id IN ('A1','A3')<br/>FOR UPDATE
+    Note over DB: Request B WAITS (blocked on A1)
+    
+    RequestA->>DB: UPDATE seats SET status='HELD'<br/>WHERE id IN ('A1','A2')
+    RequestA->>DB: INSERT INTO bookings (...)
+    RequestA->>DB: COMMIT
+    Note over DB: Lock released on A1, A2
+    
+    RequestA-->>UserA: 201 Created ✅
+    
+    Note over DB: Request B now acquires lock
+    RequestB->>DB: Check seat status
+    
+    alt A1 still AVAILABLE (impossible)
+        RequestB->>DB: UPDATE seats, INSERT booking
+        RequestB->>DB: COMMIT
+        RequestB-->>UserB: 201 Created ✅
+    else A1 now HELD (reality)
+        RequestB->>DB: ROLLBACK
+        RequestB-->>UserB: 409 SEAT_ALREADY_BOOKED ❌
+    end
+```
+
+**Critical Implementation Details:**
+
+1. **Sorted Lock Acquisition (Deadlock Prevention):**
+```java
+// ALWAYS sort seat IDs before locking
+List<String> sortedSeatIds = seatIds.stream()
+    .sorted()
+    .collect(Collectors.toList());
+
+// Query uses sorted list
+SELECT * FROM seats 
+WHERE id IN (?, ?, ?) -- sorted parameters
+FOR UPDATE;
+```
+
+**Why Sort?**
+- Request A: Wants [A3, A1] → Sorted to [A1, A3]
+- Request B: Wants [A1, A2] → Sorted to [A1, A2]
+- Both lock A1 first → No circular wait → No deadlock
+
+2. **FOR UPDATE Behavior:**
+```sql
+-- PostgreSQL lock modes
+SELECT ... FOR UPDATE;          -- Exclusive lock, blocks all other FOR UPDATE
+SELECT ... FOR UPDATE NOWAIT;   -- Fails immediately if locked (alternative)
+SELECT ... FOR UPDATE SKIP LOCKED; -- Skips locked rows (not suitable for bookings)
+```
+
+**We use FOR UPDATE (blocking) because:**
+- User expects "first-come, first-served" fairness
+- `NOWAIT` would force client-side retry loops
+- `SKIP LOCKED` would silently skip requested seats (data integrity violation)
+
+3. **Lock Holding Time:**
+```
+Lock Acquisition → Seat Update → Booking Insert → COMMIT
+Total: ~10-50ms (single-datacenter)
+```
+
+**Transaction Isolation Level:**
+```sql
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;  -- Default
+```
+
+- `READ COMMITTED` is sufficient (we use explicit locks)
+- `SERIALIZABLE` would be overkill (performance penalty)
+
+**Timing Analysis:**
+
+| Event | Time (ms) | Request A | Request B |
+|-------|-----------|-----------|-----------|
+| T+0 | 0 | BEGIN TX | BEGIN TX |
+| T+1 | 5 | Lock acquired on A1, A2 | Waiting for A1 |
+| T+2 | 15 | UPDATE seats | Still waiting |
+| T+3 | 20 | INSERT booking | Still waiting |
+| T+4 | 25 | COMMIT (lock released) | Lock acquired on A1, A3 |
+| T+5 | 30 | Response sent | Check A1 status (now HELD) |
+| T+6 | 35 | - | ROLLBACK |
+| T+7 | 40 | - | 409 Conflict sent |
+
+**Total Wait Time for Request B:** ~25ms (typical single-datacenter)
+
+**Edge Cases Handled:**
+
+| Scenario | Outcome |
+|----------|---------|
+| 3+ concurrent requests for same seat | Queued serially, first wins, others fail |
+| Deadlock (circular wait) | Prevented by sorted lock acquisition |
+| Request A crashes before COMMIT | Postgres auto-rollback, lock released |
+| Request B timeout while waiting | Connection pool timeout → 503 error |
+
+**Monitoring Metrics:**
+
+```java
+// Track lock wait times
+metrics.histogram("db.lock.wait.ms", lockWaitTime);
+
+// Track contention rate
+metrics.counter("booking.concurrent.conflict").increment();
+
+// Alert on high deadlock rate (should be zero with sorting)
+metrics.counter("db.deadlock.detected").increment();
+```
+
+**Performance Tuning:**
+
+1. **Index on seat_id:**
+```sql
+CREATE INDEX idx_seats_id_status ON seats(id, status);
+-- Enables fast lock acquisition
+```
+
+2. **Connection Pool Tuning:**
+```yaml
+spring.datasource.hikari:
+  maximum-pool-size: 50
+  connection-timeout: 5000  # Max wait for connection (ms)
+```
+
+3. **Lock Timeout (PostgreSQL):**
+```sql
+SET lock_timeout = '5s';  -- Fail request if lock wait > 5s
+```
+
+**Interview Answer Template:**
+
+> "We handle concurrent booking requests using PostgreSQL's `SELECT ... FOR UPDATE` pessimistic locking. Both requests enter a transaction, but only one acquires the lock on the contested seat. The first request proceeds with the booking and commits. The second request, upon acquiring the lock, finds the seat already marked as HELD and returns a 409 Conflict. Deadlocks are prevented by always sorting seat IDs before locking, ensuring a consistent lock acquisition order. Typical lock wait time is under 50ms for single-datacenter deployments."
+
+**Outcome:**
+- ✅ **Correctness:** Only one booking succeeds (no double-booking)
+- ✅ **Performance:** Minimal lock holding time (~25ms)
+- ✅ **Fairness:** First request to acquire lock wins
+- ✅ **No Deadlocks:** Sorted lock acquisition guarantees
+
+---
+
 ## 📊 Flow Summary Matrix
 
 | Flow            | Trigger          | Frequency | Transaction Size     | Failure Impact              |
 | --------------- | ---------------- | --------- | -------------------- | --------------------------- |
 | **A: Reserve**  | User API         | High      | Small (1-10 seats)   | Low (user retries)          |
+| **A.1: Retry**  | User API         | Medium    | Tiny (1 payment row) | Low (user retries)          |
 | **B: Webhook**  | Gateway Event    | High      | Small (1 booking)    | Medium (needs idempotency)  |
 | **C: Redirect** | User Navigation  | Medium    | Tiny (read + update) | Low (polling handles)       |
 | **D: Reaper**   | Cron (1 min)     | Constant  | Batch (100 bookings) | Low (background)            |
 | **E: Cancel**   | User API         | Low       | Small (1 booking)    | High (refund involved)      |
 | **F: Expiry**   | Cron (1 hour)    | Constant  | Batch (50 showtimes) | Low (background)            |
 | **G: Error**    | System Exception | Low       | N/A (rollback)       | Critical (needs monitoring) |
+| **H: Race**     | Concurrent Users | High      | Small (1-10 seats)   | Expected (business logic)   |
 
 ---
 
