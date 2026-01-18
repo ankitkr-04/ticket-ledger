@@ -6,35 +6,31 @@ import org.hibernate.annotations.*;
 
 import java.math.*;
 import java.time.*;
-import java.util.*;
 
 import com.ticketledger.domain.model.key.BookingSeatId;
 
 /**
  * Junction table linking bookings to seats with price snapshot.
+ * Uses @EmbeddedId + @MapsId pattern for clean composite key handling.
  */
 @Entity
 @Table(name = "booking_seats")
-@IdClass(BookingSeatId.class)
 @Getter
 @Setter
 @NoArgsConstructor
 public class BookingSeat {
 
-    @Id
-    @Column(name = "booking_id")
-    private UUID bookingId;
-
-    @Id
-    @Column(name = "seat_id")
-    private UUID seatId;
+    @EmbeddedId
+    private BookingSeatId id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "booking_id", insertable = false, updatable = false)
+    @MapsId("bookingId")
+    @JoinColumn(name = "booking_id")
     private Booking booking;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "seat_id", insertable = false, updatable = false)
+    @MapsId("seatId")
+    @JoinColumn(name = "seat_id")
     private Seat seat;
 
     @Column(name = "price_at_booking", precision = 10, scale = 2)
@@ -43,4 +39,11 @@ public class BookingSeat {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    public BookingSeat(Booking booking, Seat seat, BigDecimal priceAtBooking) {
+        this.id = new BookingSeatId(booking.getId(), seat.getId());
+        this.booking = booking;
+        this.seat = seat;
+        this.priceAtBooking = priceAtBooking;
+    }
 }

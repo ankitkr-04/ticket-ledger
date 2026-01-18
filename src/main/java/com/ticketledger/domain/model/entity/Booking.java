@@ -2,11 +2,10 @@ package com.ticketledger.domain.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.*;
 
 import java.time.*;
-import java.util.*;
 
+import com.ticketledger.domain.model.base.BaseEntity;
 import com.ticketledger.domain.model.enums.BookingStatus;
 
 /**
@@ -17,10 +16,7 @@ import com.ticketledger.domain.model.enums.BookingStatus;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Booking {
-
-    @Id
-    private UUID id;
+public class Booking extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
@@ -45,12 +41,4 @@ public class Booking {
 
     @Column(name = "completed_at")
     private Instant completedAt;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 }

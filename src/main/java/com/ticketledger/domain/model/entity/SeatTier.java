@@ -5,8 +5,8 @@ import lombok.*;
 import org.hibernate.annotations.*;
 
 import java.math.*;
-import java.time.*;
-import java.util.*;
+
+import com.ticketledger.domain.model.base.SoftDeletableEntity;
 
 /**
  * Represents a pricing tier for seats (e.g., VIP, Regular, Balcony).
@@ -18,21 +18,11 @@ import java.util.*;
 @Getter
 @Setter
 @NoArgsConstructor
-public class SeatTier {
-
-    @Id
-    private UUID id;
+public class SeatTier extends SoftDeletableEntity {
 
     @Column(nullable = false, length = 50)
     private String name;
 
     @Column(name = "price_multiplier", precision = 3, scale = 2)
     private BigDecimal priceMultiplier = BigDecimal.ONE;
-
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
 }

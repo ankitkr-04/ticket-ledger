@@ -4,8 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.*;
 
-import java.time.*;
-import java.util.*;
+import com.ticketledger.domain.model.base.SoftDeletableEntity;
 
 /**
  * Represents a movie available for scheduling.
@@ -17,21 +16,11 @@ import java.util.*;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Movie {
-
-    @Id
-    private UUID id;
+public class Movie extends SoftDeletableEntity {
 
     @Column(nullable = false, length = 255)
     private String title;
 
     @Column(name = "duration_minutes", nullable = false)
     private int durationMinutes;
-
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
 }

@@ -9,6 +9,7 @@ import java.math.*;
 import java.time.*;
 import java.util.*;
 
+import com.ticketledger.domain.model.base.BaseEntity;
 import com.ticketledger.domain.model.enums.PaymentStatus;
 
 /**
@@ -19,10 +20,7 @@ import com.ticketledger.domain.model.enums.PaymentStatus;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Payment {
-
-    @Id
-    private UUID id;
+public class Payment extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "booking_id", nullable = false)
@@ -53,12 +51,4 @@ public class Payment {
 
     @Column(name = "provider_captured_at")
     private Instant providerCapturedAt;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 }

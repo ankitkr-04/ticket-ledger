@@ -5,8 +5,8 @@ import lombok.*;
 import org.hibernate.annotations.*;
 
 import java.time.*;
-import java.util.*;
 
+import com.ticketledger.domain.model.base.SoftDeletableEntity;
 import com.ticketledger.domain.model.enums.ShowtimeStatus;
 
 /**
@@ -19,10 +19,7 @@ import com.ticketledger.domain.model.enums.ShowtimeStatus;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Showtime {
-
-    @Id
-    private UUID id;
+public class Showtime extends SoftDeletableEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "movie_id", nullable = false)
@@ -41,15 +38,4 @@ public class Showtime {
     @Enumerated(EnumType.STRING)
     @Column(columnDefinition = "showtime_status")
     private ShowtimeStatus status = ShowtimeStatus.ACTIVE;
-
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 }

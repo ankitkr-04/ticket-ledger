@@ -4,9 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.*;
 
-import java.time.*;
-import java.util.*;
-
+import com.ticketledger.domain.model.base.SoftDeletableEntity;
 import com.ticketledger.domain.model.enums.UserRole;
 
 /**
@@ -19,10 +17,7 @@ import com.ticketledger.domain.model.enums.UserRole;
 @Getter
 @Setter
 @NoArgsConstructor
-public class User {
-
-    @Id
-    private UUID id;
+public class User extends SoftDeletableEntity {
 
     @Column(nullable = false, length = 255)
     private String email;
@@ -36,15 +31,4 @@ public class User {
 
     @Column(name = "is_verified")
     private boolean isVerified = false;
-
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 }

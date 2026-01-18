@@ -1,9 +1,23 @@
 package com.ticketledger.domain.model.key;
 
-import java.io.Serializable;
-import java.util.UUID;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.io.*;
+import java.util.*;
 
 /**
- * Composite primary key for the BookingSeat junction table.
+ * Embeddable composite key for the BookingSeat junction table.
  */
-public record BookingSeatId(UUID bookingId, UUID seatId) implements Serializable {}
+@Embeddable
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class BookingSeatId implements Serializable {
+
+    @Column(name = "booking_id")
+    private UUID bookingId;
+
+    @Column(name = "seat_id")
+    private UUID seatId;
+}
