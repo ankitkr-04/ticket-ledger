@@ -1,10 +1,12 @@
 package com.ticketledger.domain.model.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-
 import com.ticketledger.domain.model.base.BaseEntity;
 import com.ticketledger.domain.model.enums.SeatStatus;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Represents an individual bookable seat for a showtime.

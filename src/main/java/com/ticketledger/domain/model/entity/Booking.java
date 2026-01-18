@@ -1,12 +1,14 @@
 package com.ticketledger.domain.model.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-
-import java.time.*;
+import java.time.Instant;
 
 import com.ticketledger.domain.model.base.BaseEntity;
 import com.ticketledger.domain.model.enums.BookingStatus;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Represents a booking reservation in the system.
