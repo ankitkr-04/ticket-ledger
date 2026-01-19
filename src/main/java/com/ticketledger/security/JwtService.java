@@ -1,6 +1,8 @@
 package com.ticketledger.security;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -45,12 +47,14 @@ public class JwtService {
     }
 
     public String generateToken(Map<String, Object> extraClaims, String username) {
-        long now = System.currentTimeMillis();
+        Instant now = Instant.now();
+        Instant validity = now.plus(jwtProperties.accessTokenExpiration(), ChronoUnit.MILLIS);
+
         return Jwts.builder()
                 .claims(extraClaims)
                 .subject(username)
-                .issuedAt(new Date(now))
-                .expiration(new Date(now + jwtProperties.accessTokenExpiration()))
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(validity))
                 .signWith(key)
                 .compact();
     }
@@ -70,11 +74,11 @@ public class JwtService {
     }
 
     private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+        return extractExpiration(token).isBefore(Instant.now());
     }
 
-    private Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
+    private Instant extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration).toInstant();
     }
 
     private Claims extractAllClaims(String token) {
