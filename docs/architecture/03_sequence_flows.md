@@ -581,11 +581,9 @@ log.error("Booking reservation failed",
 
 **Purpose:** Demonstrate database-level locking prevents double-booking
 
-**Business Context:**
-- **The Interview Question:** "How do you handle two users booking the same seat at the exact same time?"
-- **The Answer:** Database pessimistic locking with sorted lock acquisition prevents deadlocks
+**Business Context:** When concurrent requests target overlapping seat inventory, the system must ensure only one booking succeeds while maintaining data consistency and preventing deadlocks.
 
-**Scenario:** User A and User B both try to book Seat A1 at 10:30:00.000
+**Scenario:** User A and User B both attempt to book Seat A1 simultaneously
 
 **Sequence:**
 
@@ -684,27 +682,27 @@ SET TRANSACTION ISOLATION LEVEL READ COMMITTED;  -- Default
 
 **Timing Analysis:**
 
-| Event | Time (ms) | Request A | Request B |
-|-------|-----------|-----------|-----------|
-| T+0 | 0 | BEGIN TX | BEGIN TX |
-| T+1 | 5 | Lock acquired on A1, A2 | Waiting for A1 |
-| T+2 | 15 | UPDATE seats | Still waiting |
-| T+3 | 20 | INSERT booking | Still waiting |
-| T+4 | 25 | COMMIT (lock released) | Lock acquired on A1, A3 |
-| T+5 | 30 | Response sent | Check A1 status (now HELD) |
-| T+6 | 35 | - | ROLLBACK |
-| T+7 | 40 | - | 409 Conflict sent |
+| Event | Time (ms) | Request A               | Request B                  |
+| ----- | --------- | ----------------------- | -------------------------- |
+| T+0   | 0         | BEGIN TX                | BEGIN TX                   |
+| T+1   | 5         | Lock acquired on A1, A2 | Waiting for A1             |
+| T+2   | 15        | UPDATE seats            | Still waiting              |
+| T+3   | 20        | INSERT booking          | Still waiting              |
+| T+4   | 25        | COMMIT (lock released)  | Lock acquired on A1, A3    |
+| T+5   | 30        | Response sent           | Check A1 status (now HELD) |
+| T+6   | 35        | -                       | ROLLBACK                   |
+| T+7   | 40        | -                       | 409 Conflict sent          |
 
 **Total Wait Time for Request B:** ~25ms (typical single-datacenter)
 
 **Edge Cases Handled:**
 
-| Scenario | Outcome |
-|----------|---------|
+| Scenario                             | Outcome                                  |
+| ------------------------------------ | ---------------------------------------- |
 | 3+ concurrent requests for same seat | Queued serially, first wins, others fail |
-| Deadlock (circular wait) | Prevented by sorted lock acquisition |
-| Request A crashes before COMMIT | Postgres auto-rollback, lock released |
-| Request B timeout while waiting | Connection pool timeout → 503 error |
+| Deadlock (circular wait)             | Prevented by sorted lock acquisition     |
+| Request A crashes before COMMIT      | Postgres auto-rollback, lock released    |
+| Request B timeout while waiting      | Connection pool timeout → 503 error      |
 
 **Monitoring Metrics:**
 
@@ -734,14 +732,21 @@ spring.datasource.hikari:
   connection-timeout: 5000  # Max wait for connection (ms)
 ```
 
-3. **Lock Timeout (PostgreSQL):**
+3. **Lock Timeout Configuration (PostgreSQL):**
 ```sql
 SET lock_timeout = '5s';  -- Fail request if lock wait > 5s
 ```
 
-**Interview Answer Template:**
+**Concurrency Properties:**
 
-> "We handle concurrent booking requests using PostgreSQL's `SELECT ... FOR UPDATE` pessimistic locking. Both requests enter a transaction, but only one acquires the lock on the contested seat. The first request proceeds with the booking and commits. The second request, upon acquiring the lock, finds the seat already marked as HELD and returns a 409 Conflict. Deadlocks are prevented by always sorting seat IDs before locking, ensuring a consistent lock acquisition order. Typical lock wait time is under 50ms for single-datacenter deployments."
+The system handles concurrent booking requests using PostgreSQL's `SELECT ... FOR UPDATE` pessimistic locking. When multiple requests target the same seats:
+
+1. **Lock Acquisition:** First request to acquire row-level lock proceeds immediately
+2. **Blocking:** Subsequent requests wait for lock release (typically <50ms)
+3. **Validation:** Upon lock acquisition, request validates seat availability
+4. **Resolution:** If seat is unavailable (HELD/SOLD), transaction rolls back with 409 Conflict
+
+**Deadlock Prevention:** Sorting seat IDs before locking ensures consistent lock acquisition order across all requests, eliminating circular wait conditions.
 
 **Outcome:**
 - ✅ **Correctness:** Only one booking succeeds (no double-booking)

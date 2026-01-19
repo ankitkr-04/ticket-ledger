@@ -1,4 +1,4 @@
-package com.ticketledger.domain.model.key;
+package com.ticketledger.domain.repository;
 
 import java.util.List;
 import java.util.Optional;

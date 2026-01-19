@@ -115,14 +115,14 @@ idempotency:{userId}:{idempotencyKey} → {statusCode, responseBody, expiresAt}
 
 **Field Definitions:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `success` | `boolean` | ✅ | `true` for 2xx, `false` for 4xx/5xx |
-| `data` | `object` | ✅ (success) | Response payload |
-| `error` | `object` | ✅ (failure) | Error details (see Error Handling doc) |
-| `meta.timestamp` | `ISO-8601` | ✅ | Server response time (UTC) |
-| `meta.requestId` | `string` | ✅ | Unique request identifier for debugging |
-| `meta.pagination` | `object` | ⚠️ | Only for paginated endpoints |
+| Field             | Type       | Required    | Description                             |
+| ----------------- | ---------- | ----------- | --------------------------------------- |
+| `success`         | `boolean`  | ✅           | `true` for 2xx, `false` for 4xx/5xx     |
+| `data`            | `object`   | ✅ (success) | Response payload                        |
+| `error`           | `object`   | ✅ (failure) | Error details (see Error Handling doc)  |
+| `meta.timestamp`  | `ISO-8601` | ✅           | Server response time (UTC)              |
+| `meta.requestId`  | `string`   | ✅           | Unique request identifier for debugging |
+| `meta.pagination` | `object`   | ⚠️           | Only for paginated endpoints            |
 
 ---
 
@@ -137,10 +137,10 @@ Used for finite datasets where users expect total counts (e.g., user booking his
 GET /api/v1/bookings?page=0&size=20
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `page` | `integer` | `0` | Zero-based page number |
-| `size` | `integer` | `20` | Items per page (max: 100) |
+| Parameter | Type      | Default | Description               |
+| --------- | --------- | ------- | ------------------------- |
+| `page`    | `integer` | `0`     | Zero-based page number    |
+| `size`    | `integer` | `20`    | Items per page (max: 100) |
 
 **Response Structure:**
 ```json
@@ -166,12 +166,12 @@ GET /api/v1/bookings?page=0&size=20
 
 **Pagination Field Definitions:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `page` | `integer` | ✅ | Current page (zero-based) |
-| `size` | `integer` | ✅ | Items per page |
-| `hasMore` | `boolean` | ✅ | Whether more pages exist |
-| `totalElements` | `integer\|null` | ⚠️ | Total count (may be `null` if expensive) |
+| Field           | Type            | Required | Description                              |
+| --------------- | --------------- | -------- | ---------------------------------------- |
+| `page`          | `integer`       | ✅        | Current page (zero-based)                |
+| `size`          | `integer`       | ✅        | Items per page                           |
+| `hasMore`       | `boolean`       | ✅        | Whether more pages exist                 |
+| `totalElements` | `integer\|null` | ⚠️        | Total count (may be `null` if expensive) |
 
 **When to Omit `totalElements`:**
 - Large datasets where `COUNT(*)` is expensive (>1 million rows)
@@ -192,7 +192,235 @@ GET /api/v1/bookings?page=0&size=20
 
 ---
 
-## 📋 Core Endpoints
+## � Authentication Endpoints
+
+### 1. Login
+
+**Endpoint:** `POST /auth/login`
+
+**Purpose:** Authenticate user and issue access token + refresh token pair
+
+**Headers:**
+```http
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Request Schema:**
+
+| Field      | Type     | Required | Constraints        | Description                                |
+| ---------- | -------- | -------- | ------------------ | ------------------------------------------ |
+| `email`    | `string` | ✅        | Valid email format | User's login email                         |
+| `password` | `string` | ✅        | 8-100 chars        | User's password (plaintext, TLS-encrypted) |
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "tokenType": "Bearer",
+    "expiresIn": 900,
+    "user": {
+      "userId": "user-uuid-123",
+      "email": "user@example.com",
+      "role": "CUSTOMER",
+      "isVerified": true
+    }
+  },
+  "meta": {
+    "timestamp": "2026-01-18T10:30:00Z",
+    "requestId": "req-login-001"
+  }
+}
+```
+
+**Response Schema (`AuthResponse`):**
+
+| Field             | Type            | Description                                |
+| ----------------- | --------------- | ------------------------------------------ |
+| `accessToken`     | `string (JWT)`  | Short-lived access token (15 min)          |
+| `refreshToken`    | `string (UUID)` | Long-lived refresh token (30 days)         |
+| `tokenType`       | `string`        | Always `"Bearer"`                          |
+| `expiresIn`       | `integer`       | Access token TTL in seconds (900 = 15 min) |
+| `user.userId`     | `string (UUID)` | User identifier                            |
+| `user.email`      | `string`        | User's email address                       |
+| `user.role`       | `enum`          | `CUSTOMER` or `ADMIN`                      |
+| `user.isVerified` | `boolean`       | Email verification status                  |
+
+**Error Responses:**
+
+| Status | Error Code            | Description                         |
+| ------ | --------------------- | ----------------------------------- |
+| `400`  | `INVALID_REQUEST`     | Missing/invalid fields              |
+| `401`  | `INVALID_CREDENTIALS` | Wrong email or password             |
+| `403`  | `EMAIL_NOT_VERIFIED`  | Account exists but email unverified |
+| `403`  | `ACCOUNT_LOCKED`      | Too many failed login attempts      |
+| `404`  | `USER_NOT_FOUND`      | No account with that email          |
+
+**Example Error:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_CREDENTIALS",
+    "message": "Invalid email or password.",
+    "context": {},
+    "requestId": "req-login-002"
+  },
+  "meta": {
+    "timestamp": "2026-01-18T10:31:00Z"
+  }
+}
+```
+
+**Token Lifecycle:**
+- **Access Token (JWT):** 15 minutes, stateless, stored in memory (frontend)
+- **Refresh Token:** 30 days, stateful (stored in database), stored in HTTP-only cookie or secure storage
+- Client should refresh access token before expiry using `/auth/refresh`
+
+---
+
+### 2. Refresh Access Token
+
+**Endpoint:** `POST /auth/refresh`
+
+**Purpose:** Exchange valid refresh token for new access token + refresh token pair
+
+**Headers:**
+```http
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "refreshToken": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+}
+```
+
+**Request Schema:**
+
+| Field          | Type     | Required | Constraints       | Description              |
+| -------------- | -------- | -------- | ----------------- | ------------------------ |
+| `refreshToken` | `string` | ✅        | Valid UUID format | Refresh token from login |
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "a91dc2e8-1b45-4d7f-9c12-8e73f4a5b6d1",
+    "tokenType": "Bearer",
+    "expiresIn": 900,
+    "user": {
+      "userId": "user-uuid-123",
+      "email": "user@example.com",
+      "role": "CUSTOMER",
+      "isVerified": true
+    }
+  },
+  "meta": {
+    "timestamp": "2026-01-18T10:45:00Z",
+    "requestId": "req-refresh-001"
+  }
+}
+```
+
+**Response Schema:** Same as login (`AuthResponse`)
+
+**Token Rotation Behavior:**
+- Old refresh token is **automatically revoked** upon successful refresh
+- New refresh token is issued with fresh 30-day expiry
+- This implements **refresh token rotation** for enhanced security
+- If old token is reused, it indicates potential token theft → revoke all user tokens
+
+**Error Responses:**
+
+| Status | Error Code              | Description                     |
+| ------ | ----------------------- | ------------------------------- |
+| `400`  | `INVALID_REQUEST`       | Missing/malformed refresh token |
+| `401`  | `INVALID_REFRESH_TOKEN` | Token not found in database     |
+| `401`  | `TOKEN_EXPIRED`         | Refresh token past expiry time  |
+| `401`  | `TOKEN_REVOKED`         | Token was manually revoked      |
+| `403`  | `ACCOUNT_DELETED`       | User account is soft-deleted    |
+
+**Example Error:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "TOKEN_EXPIRED",
+    "message": "Refresh token has expired. Please login again.",
+    "context": {
+      "expiredAt": "2026-01-15T10:30:00Z"
+    },
+    "requestId": "req-refresh-002"
+  },
+  "meta": {
+    "timestamp": "2026-01-18T10:45:00Z"
+  }
+}
+```
+
+**Security Notes:**
+- Refresh tokens are stored as **SHA-256 hashes** in database
+- Client receives plaintext token; server hashes before validation
+- Rotation prevents token replay attacks
+- Database breach: Attacker gets hashes, not usable tokens
+- Consider rate limiting: Max 10 refresh attempts per minute per user
+
+---
+
+### 3. Logout
+
+**Endpoint:** `POST /auth/logout`
+
+**Purpose:** Revoke refresh token and invalidate session
+
+**Headers:**
+```http
+Authorization: Bearer {access_token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "refreshToken": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+}
+```
+
+**Success Response (204 No Content):**
+```
+No response body
+```
+
+**Error Responses:**
+
+| Status | Error Code        | Description                  |
+| ------ | ----------------- | ---------------------------- |
+| `401`  | `UNAUTHORIZED`    | Missing/invalid access token |
+| `400`  | `INVALID_REQUEST` | Missing refresh token        |
+
+**Behavior:**
+- Marks refresh token as `revoked = TRUE` in database
+- Access token remains valid until expiry (stateless JWT limitation)
+- Client must discard both tokens from storage
+- Idempotent: Multiple logout calls with same token succeed
+
+---
+
+## �📋 Core Endpoints
 
 ### 1. Reserve Seats (Create Booking)
 
@@ -221,10 +449,10 @@ Content-Type: application/json
 
 **Request Schema:**
 
-| Field | Type | Required | Constraints | Description |
-|-------|------|----------|-------------|-------------|
-| `showtimeId` | `string (UUID)` | ✅ | Valid showtime ID | Which showtime to book |
-| `seatIds` | `array<string>` | ✅ | 1-10 seats, all must be AVAILABLE | Seats to reserve |
+| Field        | Type            | Required | Constraints                       | Description            |
+| ------------ | --------------- | -------- | --------------------------------- | ---------------------- |
+| `showtimeId` | `string (UUID)` | ✅        | Valid showtime ID                 | Which showtime to book |
+| `seatIds`    | `array<string>` | ✅        | 1-10 seats, all must be AVAILABLE | Seats to reserve       |
 
 **Success Response (201 Created):**
 ```json
@@ -266,29 +494,29 @@ Content-Type: application/json
 
 **Response Schema:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `bookingId` | `string (UUID)` | Internal booking identifier |
-| `status` | `enum` | Always `HELD` on creation |
-| `expiresAt` | `ISO-8601` | Hold expiry time (created_at + 10 min) |
-| `seats` | `array<SeatDetails>` | Reserved seat information |
-| `amount.total` | `decimal` | Total payment amount |
-| `amount.currency` | `string` | ISO 4217 currency code |
-| `amount.breakdown` | `array` | Per-seat pricing |
-| `payment.paymentId` | `string (UUID)` | Internal payment identifier |
-| `payment.provider` | `enum` | `STRIPE`, `RAZORPAY`, etc. |
-| `payment.clientSecret` | `string` | **Primary:** SDK token for frontend |
-| `payment.redirectUrl` | `string (URL)` | **Fallback:** Hosted payment page |
+| Field                  | Type                 | Description                            |
+| ---------------------- | -------------------- | -------------------------------------- |
+| `bookingId`            | `string (UUID)`      | Internal booking identifier            |
+| `status`               | `enum`               | Always `HELD` on creation              |
+| `expiresAt`            | `ISO-8601`           | Hold expiry time (created_at + 10 min) |
+| `seats`                | `array<SeatDetails>` | Reserved seat information              |
+| `amount.total`         | `decimal`            | Total payment amount                   |
+| `amount.currency`      | `string`             | ISO 4217 currency code                 |
+| `amount.breakdown`     | `array`              | Per-seat pricing                       |
+| `payment.paymentId`    | `string (UUID)`      | Internal payment identifier            |
+| `payment.provider`     | `enum`               | `STRIPE`, `RAZORPAY`, etc.             |
+| `payment.clientSecret` | `string`             | **Primary:** SDK token for frontend    |
+| `payment.redirectUrl`  | `string (URL)`       | **Fallback:** Hosted payment page      |
 
 **Error Responses:**
 
-| Status | Error Code | Description |
-|--------|------------|-------------|
-| `400` | `INVALID_REQUEST` | Missing/invalid fields |
-| `400` | `SHOWTIME_CLOSED` | Showtime not ACTIVE or expired |
-| `400` | `MAX_SEATS_EXCEEDED` | Requested >10 seats |
-| `409` | `SEAT_ALREADY_BOOKED` | One or more seats unavailable |
-| `409` | `IDEMPOTENCY_CONFLICT` | Same key, different payload |
+| Status | Error Code             | Description                    |
+| ------ | ---------------------- | ------------------------------ |
+| `400`  | `INVALID_REQUEST`      | Missing/invalid fields         |
+| `400`  | `SHOWTIME_CLOSED`      | Showtime not ACTIVE or expired |
+| `400`  | `MAX_SEATS_EXCEEDED`   | Requested >10 seats            |
+| `409`  | `SEAT_ALREADY_BOOKED`  | One or more seats unavailable  |
+| `409`  | `IDEMPOTENCY_CONFLICT` | Same key, different payload    |
 
 **Example Error:**
 ```json
@@ -361,11 +589,11 @@ Content-Type: application/json
 
 **Response Schema:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `payment.paymentId` | `string (UUID)` | New payment record identifier |
-| `payment.attemptNumber` | `integer` | Payment attempt counter (for analytics) |
-| `expiresAt` | `ISO-8601` | Original hold expiry (not extended on retry) |
+| Field                   | Type            | Description                                  |
+| ----------------------- | --------------- | -------------------------------------------- |
+| `payment.paymentId`     | `string (UUID)` | New payment record identifier                |
+| `payment.attemptNumber` | `integer`       | Payment attempt counter (for analytics)      |
+| `expiresAt`             | `ISO-8601`      | Original hold expiry (not extended on retry) |
 
 **Business Rules:**
 - Creates a new `payments` row (allowing 1:N relationship)
@@ -376,13 +604,13 @@ Content-Type: application/json
 
 **Error Responses:**
 
-| Status | Error Code | Description |
-|--------|------------|-------------|
-| `400` | `BOOKING_EXPIRED` | Hold window expired, seats released |
-| `400` | `INVALID_BOOKING_STATUS` | Booking not in HELD state |
-| `400` | `MAX_PAYMENT_ATTEMPTS` | Exceeded 3 payment attempts |
-| `404` | `BOOKING_NOT_FOUND` | Invalid booking ID |
-| `409` | `PAYMENT_IN_PROGRESS` | Previous payment still PENDING |
+| Status | Error Code               | Description                         |
+| ------ | ------------------------ | ----------------------------------- |
+| `400`  | `BOOKING_EXPIRED`        | Hold window expired, seats released |
+| `400`  | `INVALID_BOOKING_STATUS` | Booking not in HELD state           |
+| `400`  | `MAX_PAYMENT_ATTEMPTS`   | Exceeded 3 payment attempts         |
+| `404`  | `BOOKING_NOT_FOUND`      | Invalid booking ID                  |
+| `409`  | `PAYMENT_IN_PROGRESS`    | Previous payment still PENDING      |
 
 **Example Error:**
 ```json
@@ -468,13 +696,13 @@ Content-Type: application/json
 
 **Error Responses:**
 
-| Status | Error Code | Description |
-|--------|------------|-------------|
-| `400` | `BOOKING_EXPIRED` | Hold window expired, seats released |
-| `402` | `PAYMENT_PENDING` | Payment not yet confirmed by gateway |
-| `402` | `PAYMENT_DECLINED` | Payment failed |
-| `404` | `BOOKING_NOT_FOUND` | Invalid booking ID |
-| `409` | `ALREADY_CONFIRMED` | Booking already confirmed (idempotent) |
+| Status | Error Code          | Description                            |
+| ------ | ------------------- | -------------------------------------- |
+| `400`  | `BOOKING_EXPIRED`   | Hold window expired, seats released    |
+| `402`  | `PAYMENT_PENDING`   | Payment not yet confirmed by gateway   |
+| `402`  | `PAYMENT_DECLINED`  | Payment failed                         |
+| `404`  | `BOOKING_NOT_FOUND` | Invalid booking ID                     |
+| `409`  | `ALREADY_CONFIRMED` | Booking already confirmed (idempotent) |
 
 ---
 
@@ -524,12 +752,12 @@ Content-Type: application/json
 
 **Error Responses:**
 
-| Status | Error Code | Description |
-|--------|------------|-------------|
-| `400` | `CANCELLATION_TOO_LATE` | Less than 3 hours before showtime |
-| `400` | `INVALID_STATUS` | Booking not in CONFIRMED state |
-| `404` | `BOOKING_NOT_FOUND` | Invalid booking ID |
-| `409` | `ALREADY_CANCELLED` | Booking already cancelled |
+| Status | Error Code              | Description                       |
+| ------ | ----------------------- | --------------------------------- |
+| `400`  | `CANCELLATION_TOO_LATE` | Less than 3 hours before showtime |
+| `400`  | `INVALID_STATUS`        | Booking not in CONFIRMED state    |
+| `404`  | `BOOKING_NOT_FOUND`     | Invalid booking ID                |
+| `409`  | `ALREADY_CANCELLED`     | Booking already cancelled         |
 
 ---
 
@@ -592,10 +820,10 @@ Authorization: Bearer {jwt_token}
 
 **Error Responses:**
 
-| Status | Error Code | Description |
-|--------|------------|-------------|
-| `403` | `FORBIDDEN` | User doesn't own this booking |
-| `404` | `BOOKING_NOT_FOUND` | Invalid booking ID |
+| Status | Error Code          | Description                   |
+| ------ | ------------------- | ----------------------------- |
+| `403`  | `FORBIDDEN`         | User doesn't own this booking |
+| `404`  | `BOOKING_NOT_FOUND` | Invalid booking ID            |
 
 ---
 
@@ -612,13 +840,13 @@ Authorization: Bearer {jwt_token}
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `page` | `integer` | `0` | Zero-based page number |
-| `size` | `integer` | `20` | Items per page (max: 100) |
-| `status` | `enum` | `null` | Filter by status (CONFIRMED, CANCELLED, etc.) |
-| `sortBy` | `enum` | `createdAt` | Sort field (createdAt, showtimeDate) |
-| `sortOrder` | `enum` | `DESC` | ASC or DESC |
+| Parameter   | Type      | Default     | Description                                   |
+| ----------- | --------- | ----------- | --------------------------------------------- |
+| `page`      | `integer` | `0`         | Zero-based page number                        |
+| `size`      | `integer` | `20`        | Items per page (max: 100)                     |
+| `status`    | `enum`    | `null`      | Filter by status (CONFIRMED, CANCELLED, etc.) |
+| `sortBy`    | `enum`    | `createdAt` | Sort field (createdAt, showtimeDate)          |
+| `sortOrder` | `enum`    | `DESC`      | ASC or DESC                                   |
 
 **Success Response (200 OK):**
 ```json
@@ -674,10 +902,10 @@ Authorization: Bearer {jwt_token}  // Optional for browsing
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `showtimeId` | `string (UUID)` | ✅ | Which showtime |
-| `status` | `enum` | ❌ | Filter by status (default: AVAILABLE) |
+| Parameter    | Type            | Required | Description                           |
+| ------------ | --------------- | -------- | ------------------------------------- |
+| `showtimeId` | `string (UUID)` | ✅        | Which showtime                        |
+| `status`     | `enum`          | ❌        | Filter by status (default: AVAILABLE) |
 
 **Success Response (200 OK):**
 ```json
@@ -742,13 +970,13 @@ Authorization: Bearer {jwt_token}  // Optional for browsing
 
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `movieId` | `string (UUID)` | `null` | Filter by movie |
-| `date` | `ISO-8601 date` | `today` | Filter by date (YYYY-MM-DD) |
-| `screenId` | `string (UUID)` | `null` | Filter by screen |
-| `page` | `integer` | `0` | Zero-based page |
-| `size` | `integer` | `20` | Items per page |
+| Parameter  | Type            | Default | Description                 |
+| ---------- | --------------- | ------- | --------------------------- |
+| `movieId`  | `string (UUID)` | `null`  | Filter by movie             |
+| `date`     | `ISO-8601 date` | `today` | Filter by date (YYYY-MM-DD) |
+| `screenId` | `string (UUID)` | `null`  | Filter by screen            |
+| `page`     | `integer`       | `0`     | Zero-based page             |
+| `size`     | `integer`       | `20`    | Items per page              |
 
 **Success Response (200 OK):**
 ```json
@@ -811,6 +1039,7 @@ CancelBookingRequest
 
 ### Response DTOs
 ```java
+AuthResponse                 // Login/refresh response
 BookingResponse              // Full details (GET /bookings/{id})
 BookingSummaryResponse       // List view (GET /bookings)
 BookingConfirmationResponse  // After confirmation (with QR code)
@@ -859,18 +1088,18 @@ public BookingResponse getBooking(@PathVariable UUID id) {
 
 ## 📊 HTTP Status Code Guide
 
-| Status | Usage | Example |
-|--------|-------|---------|
-| `200 OK` | Successful read or update | GET booking, POST confirm |
-| `201 Created` | Resource created | POST /bookings |
-| `400 Bad Request` | Validation error | Invalid seat IDs |
-| `401 Unauthorized` | Missing/invalid auth token | No JWT |
-| `403 Forbidden` | Valid token, insufficient permissions | User accessing admin endpoint |
-| `404 Not Found` | Resource doesn't exist | Invalid booking ID |
-| `409 Conflict` | Business rule violation | Seat already booked |
-| `422 Unprocessable Entity` | Semantic error | Booking expired showtime |
-| `500 Internal Server Error` | Unhandled exception | Database down |
-| `503 Service Unavailable` | Downstream service down | Payment gateway timeout |
+| Status                      | Usage                                 | Example                       |
+| --------------------------- | ------------------------------------- | ----------------------------- |
+| `200 OK`                    | Successful read or update             | GET booking, POST confirm     |
+| `201 Created`               | Resource created                      | POST /bookings                |
+| `400 Bad Request`           | Validation error                      | Invalid seat IDs              |
+| `401 Unauthorized`          | Missing/invalid auth token            | No JWT                        |
+| `403 Forbidden`             | Valid token, insufficient permissions | User accessing admin endpoint |
+| `404 Not Found`             | Resource doesn't exist                | Invalid booking ID            |
+| `409 Conflict`              | Business rule violation               | Seat already booked           |
+| `422 Unprocessable Entity`  | Semantic error                        | Booking expired showtime      |
+| `500 Internal Server Error` | Unhandled exception                   | Database down                 |
+| `503 Service Unavailable`   | Downstream service down               | Payment gateway timeout       |
 
 ---
 
@@ -891,5 +1120,8 @@ public BookingResponse getBooking(@PathVariable UUID id) {
 - [x] Payment approach clarified (SDK + redirect fallback)
 - [x] DTO-first strategy enforced
 - [x] All critical endpoints documented
+- [x] Authentication endpoints documented (login, refresh, logout)
+- [x] AuthResponse schema defined
+- [x] Token lifecycle and rotation strategy documented
 - [x] Error responses defined
 - [x] Security guidelines established

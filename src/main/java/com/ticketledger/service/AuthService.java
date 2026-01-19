@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ticketledger.config.JwtProperties;
 import com.ticketledger.domain.model.entity.RefreshToken;
 import com.ticketledger.domain.model.entity.User;
-import com.ticketledger.domain.model.key.RefreshTokenRepository;
+import com.ticketledger.domain.repository.RefreshTokenRepository;
 import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.dto.AuthResponse;
 import com.ticketledger.dto.LoginRequest;
