@@ -6,63 +6,94 @@ import java.util.List;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.ticketledger.domain.model.entity.Booking;
+import com.ticketledger.domain.model.entity.BookingSeat;
+import com.ticketledger.domain.model.entity.Payment;
 import com.ticketledger.domain.model.enums.BookingStatus;
 import com.ticketledger.domain.model.enums.PaymentStatus;
 
-/**
- * Detailed response DTO for a specific booking.
- * Matches the JSON contract for POST /bookings and GET /bookings/{id}.
- */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record BookingResponse(
-        UUID bookingId,
-        BookingStatus status,
+                UUID bookingId,
+                BookingStatus status,
+                Instant expiresAt,
+                Instant confirmedAt,
+                Instant cancelledAt,
+                List<SeatDTO> seats,
+                AmountDetails amount,
+                PaymentDetails payment,
+                TicketDetails ticket) {
 
-        // Included only if the booking is currently HELD
-        Instant expiresAt,
+        public static BookingResponse fromEntity(Booking booking, List<BookingSeat> bookingSeats, Payment payment) {
+                return fromEntity(booking, bookingSeats, payment, null, null);
+        }
 
-        // Included only if the booking is CONFIRMED or CANCELLED
-        Instant confirmedAt,
-        Instant cancelledAt,
+        public static BookingResponse fromEntity(Booking booking, List<BookingSeat> bookingSeats, Payment payment,
+                        String clientSecret, String redirectUrl) {
 
-        List<SeatDTO> seats,
-        AmountDetails amount,
-        PaymentDetails payment,
+                var amountDetails = new AmountDetails(
+                                payment.getAmount(),
+                                payment.getCurrency(),
+                                bookingSeats.stream()
+                                                .map(bs -> new SeatPriceBreakdown(bs.getSeat().getId(),
+                                                                bs.getPriceAtBooking()))
+                                                .toList());
 
-        // Included only upon successful confirmation
-        TicketDetails ticket) {
+                var paymentDetails = new PaymentDetails(
+                                payment.getId(),
+                                payment.getProvider(),
+                                payment.getStatus(),
+                                payment.getMethod(),
+                                clientSecret,
+                                redirectUrl,
+                                payment.getProviderCapturedAt(),
+                                null);
 
-    // --- Nested DTOs to match JSON Structure ---
+                List<SeatDTO> seatDTOs = bookingSeats.stream()
+                                .map(bs -> new SeatDTO(
+                                                bs.getSeat().getId(),
+                                                bs.getSeat().getSeatRow(),
+                                                bs.getSeat().getSeatNumber(),
+                                                bs.getSeat().getTier().getName(),
+                                                bs.getPriceAtBooking()))
+                                .toList();
 
-    public record AmountDetails(
-            BigDecimal total,
-            String currency,
-            // Breakdown is optional/nullable based on view depth
-            List<SeatPriceBreakdown> breakdown) {
-    }
+                return new BookingResponse(
+                                booking.getId(),
+                                booking.getStatus(),
+                                booking.getLockedUntil(),
+                                booking.getConfirmedAt(),
+                                booking.getCancelledAt(),
+                                seatDTOs,
+                                amountDetails,
+                                paymentDetails,
+                                null);
+        }
 
-    public record SeatPriceBreakdown(
-            UUID seatId,
-            BigDecimal price) {
-    }
+        public record AmountDetails(
+                        BigDecimal total,
+                        String currency,
+                        List<SeatPriceBreakdown> breakdown) {
+        }
 
-    public record PaymentDetails(
-            UUID paymentId,
-            String provider, // e.g., "STRIPE"
-            PaymentStatus status,
-            String method, // e.g., "CREDIT_CARD"
+        public record SeatPriceBreakdown(
+                        UUID seatId,
+                        BigDecimal price) {
+        }
 
-            // Fields specific to the payment flow (creating a hold)
-            String clientSecret,
-            String redirectUrl,
+        public record PaymentDetails(
+                        UUID paymentId,
+                        String provider,
+                        PaymentStatus status,
+                        String method,
+                        String clientSecret,
+                        String redirectUrl,
+                        Instant capturedAt,
+                        Integer attemptNumber) {
+        }
 
-            // Fields specific to historical view
-            Instant capturedAt,
-            Integer attemptNumber) {
-    }
-
-    public record TicketDetails(
-            String qrCode, // Base64 encoded image or raw string data
-            String ticketNumber) {
-    }
+        public record TicketDetails(
+                        String qrCode,
+                        String ticketNumber) {
+        }
 }

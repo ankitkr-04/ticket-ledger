@@ -1,13 +1,19 @@
 package com.ticketledger.domain.model.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.*;
+import java.time.Instant;
 
-import java.time.*;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 import com.ticketledger.domain.model.base.SoftDeletableEntity;
 import com.ticketledger.domain.model.enums.ShowtimeStatus;
+import com.ticketledger.exception.ShowtimeClosedException;
+import com.ticketledger.exception.ShowtimeExpiredException;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Represents a scheduled screening of a movie on a screen.
@@ -38,4 +44,14 @@ public class Showtime extends SoftDeletableEntity {
     @Enumerated(EnumType.STRING)
     @Column(columnDefinition = "showtime_status")
     private ShowtimeStatus status = ShowtimeStatus.ACTIVE;
+
+    public void checkBookable() {
+        if (this.status != ShowtimeStatus.ACTIVE) {
+            throw new ShowtimeClosedException(this.status);
+        }
+
+        if (this.startTime.isBefore(Instant.now())) {
+            throw new ShowtimeExpiredException(this.startTime);
+        }
+    }
 }

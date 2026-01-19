@@ -1,13 +1,16 @@
 package com.ticketledger.domain.model.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.*;
+import java.math.BigDecimal;
+import java.time.Instant;
 
-import java.math.*;
-import java.time.*;
+import org.hibernate.annotations.CreationTimestamp;
 
 import com.ticketledger.domain.model.key.BookingSeatId;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Junction table linking bookings to seats with price snapshot.
@@ -24,12 +27,12 @@ public class BookingSeat {
     private BookingSeatId id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @MapsId("bookingId")
+    @MapsId("bookingId") // Maps "bookingId" attribute in BookingSeatId
     @JoinColumn(name = "booking_id")
     private Booking booking;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @MapsId("seatId")
+    @MapsId("seatId") // Maps "seatId" attribute in BookingSeatId
     @JoinColumn(name = "seat_id")
     private Seat seat;
 
