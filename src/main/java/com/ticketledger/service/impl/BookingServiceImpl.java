@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ticketledger.config.BookingProperties;
 import com.ticketledger.domain.model.entity.*;
 import com.ticketledger.domain.model.enums.BookingStatus;
+import com.ticketledger.domain.model.enums.PaymentProvider;
 import com.ticketledger.domain.model.enums.PaymentStatus;
 import com.ticketledger.domain.model.enums.SeatStatus;
 import com.ticketledger.domain.repository.*;
@@ -126,7 +127,7 @@ public class BookingServiceImpl implements BookingService {
                 payment.setBooking(booking);
                 payment.setAmount(amount);
                 payment.setCurrency(bookingProperties.currency());
-                payment.setProvider("STRIPE");
+                payment.setProvider(PaymentProvider.STRIPE);
                 payment.setStatus(PaymentStatus.PENDING);
                 return paymentRepository.save(payment);
         }

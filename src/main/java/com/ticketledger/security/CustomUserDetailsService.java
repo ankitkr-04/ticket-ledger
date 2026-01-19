@@ -3,7 +3,6 @@ package com.ticketledger.security;
 import java.util.List;
 
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -23,14 +22,16 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) {
         var user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
 
         var authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
 
-        return new User(
-                user.getEmail(), user.getPasswordHash(), user.isVerified(), true, true, true, List.of(authority)
-
-        );
+        // FIX: Return AuthenticatedUser to carry the UUID to the controller
+        return new AuthenticatedUser(
+                user.getId(),
+                user.getEmail(),
+                user.getPasswordHash(),
+                user.isVerified(), // enabled
+                List.of(authority));
     }
-
 }

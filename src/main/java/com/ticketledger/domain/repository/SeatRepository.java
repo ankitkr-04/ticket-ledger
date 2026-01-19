@@ -6,13 +6,14 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.stereotype.Repository;
 
 import com.ticketledger.domain.model.entity.Seat;
 import com.ticketledger.domain.model.enums.SeatStatus;
 
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 
 @Repository
 public interface SeatRepository extends JpaRepository<Seat, UUID> {
@@ -22,8 +23,12 @@ public interface SeatRepository extends JpaRepository<Seat, UUID> {
      * Uses PESSIMISTIC_WRITE (SELECT ... FOR UPDATE).
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT s FROM Seat s WHERE s.id IN :ids ORDER BY s.id")
-    List<Seat> lockSeats(@Param("ids") List<UUID> ids);
+    @QueryHints({ @QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000") }) // Fail fast after 3s
+    @Query("SELECT s FROM Seat s " +
+            "LEFT JOIN FETCH s.tier " + // Fetch Tier in same query
+            "LEFT JOIN FETCH s.showtime " + // Fetch Showtime in same query
+            "WHERE s.id IN :seatIds")
+    List<Seat> lockSeats(List<UUID> seatIds);
 
     /**
      * Magic method to find available seats for a specific showtime.

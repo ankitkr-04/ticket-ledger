@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.dto.ApiResponse;
 import com.ticketledger.dto.AuthResponse;
 import com.ticketledger.dto.LoginRequest;
@@ -16,7 +17,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping(RouteConstant.AUTH_PATH)
 @RequiredArgsConstructor
 public class AuthController {
 

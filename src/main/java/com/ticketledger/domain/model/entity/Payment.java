@@ -1,16 +1,20 @@
 package com.ticketledger.domain.model.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.*;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Map;
+
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import java.math.*;
-import java.time.*;
-import java.util.*;
-
 import com.ticketledger.domain.model.base.BaseEntity;
+import com.ticketledger.domain.model.enums.PaymentProvider;
 import com.ticketledger.domain.model.enums.PaymentStatus;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Represents a payment transaction for a booking.
@@ -32,8 +36,9 @@ public class Payment extends BaseEntity {
     @Column(length = 3)
     private String currency = "USD";
 
-    @Column(nullable = false, length = 50)
-    private String provider;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private PaymentProvider provider;
 
     @Column(length = 50)
     private String method;
