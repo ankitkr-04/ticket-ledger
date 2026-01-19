@@ -1,6 +1,5 @@
 package com.ticketledger.exception;
 
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -16,7 +15,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-import com.ticketledger.dto.ErrorResponse;
+import com.ticketledger.dto.ApiResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -84,10 +83,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         // Or fallback to a new UUID if tracing is disabled.
         String requestId = getRequestId(requestSource);
 
-        ErrorResponse response = new ErrorResponse(
-                false,
-                new ErrorResponse.ErrorDetails(code, message, requestId, context),
-                new ErrorResponse.Meta(Instant.now()));
+        ApiResponse<Object> response = ApiResponse.error(code, message, requestId, context);
 
         return new ResponseEntity<>(response, status);
     }
