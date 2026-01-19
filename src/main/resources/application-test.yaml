@@ -11,3 +11,9 @@ spring:
 
   flyway:
     clean-disabled: false             # Allow clean for integration tests
+
+security:
+  jwt:
+    secret-key: "TEST_SECRET_KEY_MUST_BE_LONG_ENOUGH_FOR_HMAC_SHA_256"
+    access-token-expiration: 5000       # 5 seconds (Fast expiry tests)
+    refresh-token-expiration: 60000     # 1 minute

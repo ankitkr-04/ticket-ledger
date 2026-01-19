@@ -33,3 +33,9 @@ logging:
     com.ticketledger: INFO
     # Silence Hibernate chatter in prod
     org.hibernate: WARN
+
+security:
+  jwt:
+    secret-key: ${JWT_SECRET_KEY}            # Must be set in Environment Variables
+    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:900000}   # Default 15 minutes
+    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:604800000} # Default 7 days

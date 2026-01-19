@@ -24,5 +24,12 @@ logging:
        org.hibernate.SQL: DEBUG  # Log SQL statements
        org.hibernate.orm.jdbc.bind: TRACE  # Log SQL parameter bindings
        org.hibernate.stat: INFO # Log Hibernate statistics for performance tuning
+
+security:
+  jwt:
+    # 32+ char secret for DEV only. Use Env Vars for PROD.
+    secret-key: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:900000}     # 15 minutes
+    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:86400000}  # 1 day (Dev convenience)
       
 
