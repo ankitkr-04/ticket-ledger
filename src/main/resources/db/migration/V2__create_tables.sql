@@ -16,7 +16,8 @@ CREATE TABLE screens (
     name VARCHAR(50) NOT NULL,
     total_seats INT DEFAULT 0,
     deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Movies table
@@ -25,7 +26,8 @@ CREATE TABLE movies (
     title VARCHAR(255) NOT NULL,
     duration_minutes INT NOT NULL,
     deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Seat tiers table
@@ -34,7 +36,8 @@ CREATE TABLE seat_tiers (
     name VARCHAR(50) NOT NULL,
     price_multiplier DECIMAL(3, 2) DEFAULT 1.0,
     deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Showtimes table
@@ -43,7 +46,7 @@ CREATE TABLE showtimes (
     movie_id UUID NOT NULL REFERENCES movies(id),
     screen_id UUID NOT NULL REFERENCES screens(id),
     start_time TIMESTAMPTZ NOT NULL,
-    end_time TIMESTAMPTZ GENERATED ALWAYS AS (start_time + INTERVAL '120 minutes') STORED,
+    end_time TIMESTAMPTZ NOT NULL,
     status showtime_status DEFAULT 'ACTIVE',
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

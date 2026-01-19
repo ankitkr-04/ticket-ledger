@@ -1,3 +1,29 @@
 spring:
   application:
     name: TicketLedger
+  
+  main:
+    banner-mode: "off"
+
+  # ACTIVATION
+  profiles:
+    active: "${SPRING_PROFILES_ACTIVE:dev}"
+
+  # JPA & FLYWAY (Common)
+  jpa:
+    open-in-view: false               # CRITICAL: Keep false to prevent N+1 issues in View layer 
+    generate-ddl: false               # We use Flyway
+    hibernate:
+      ddl-auto: validate              # Fail startup if DB schema doesn't match Entity definitions
+    properties:
+      hibernate:
+      
+        jdbc:
+          batch_size: 50
+          order_inserts: true
+          order_updates: true
+  
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: "classpath:db/migration"

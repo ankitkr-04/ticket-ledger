@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-18}
+    container_name: ticketledger-db
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ticketledger}
+      POSTGRES_USER: ${DB_USER:-ticketledger_admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-securepassword123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-ticketledger_admin} -d ${DB_NAME:-ticketledger}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+volumes:
+  postgres_data:

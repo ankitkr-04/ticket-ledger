@@ -1,0 +1,28 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: "jdbc:postgresql://localhost:${DB_PORT:5432}/${DB_NAME:ticketledger}"
+    username: "${DB_USER:postgres}"
+    password: "${DB_PASSWORD:postgres}"
+
+  jpa:
+   show-sql: false  # Show SQL statements in the console for debugging
+   properties:
+        hibernate:
+          format_sql: true  # Format SQL statements for better readability
+          use_sql_comments: true  # Add comments to SQL for easier debugging
+          highlight_sql: true  # Highlight SQL keywords in the console
+
+logging:
+     level:
+       root: INFO # General application logging
+       com.ticketledger: DEBUG  # Application-specific logging
+       org.springframework.web: DEBUG  # Log web requests and responses
+       org.springframework.transaction: DEBUG  # Log transaction management
+       org.hibernate.SQL: DEBUG  # Log SQL statements
+       org.hibernate.orm.jdbc.bind: TRACE  # Log SQL parameter bindings
+       org.hibernate.stat: INFO # Log Hibernate statistics for performance tuning
+      
+

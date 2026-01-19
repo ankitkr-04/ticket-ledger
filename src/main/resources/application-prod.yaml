@@ -1,0 +1,35 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    # In Prod, these come from Environment Variables (K8s Secrets / AWS Secrets Manager)
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASS}
+
+    # HIKARI CONNECTION POOLING (Critical for High Concurrency)
+    hikari:
+      pool-name: TicketLedgerHiPool
+      maximum-pool-size: 20           # Tuned for standard 4-8 vCPU DB
+      minimum-idle: 10                # Keep warm connections ready
+      connection-timeout: 20000       # 20s timeout (Fail fast under load)
+      idle-timeout: 300000            # 5m
+      max-lifetime: 1200000           # 20m (Refresh connections to avoid stale network issues)
+
+  jpa:
+    show-sql: false                   # ABSOLUTELY NO logging SQL in Prod (PII + Perf)
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50              # Group inserts (great for bulk booking creation)
+          order_inserts: true
+          order_updates: true
+        generate_statistics: false    # Disable overhead unless diagnosing
+
+logging:
+  level:
+    root: INFO
+    com.ticketledger: INFO
+    # Silence Hibernate chatter in prod
+    org.hibernate: WARN

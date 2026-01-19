@@ -1,0 +1,13 @@
+spring:
+  config:
+    activate:
+      on-profile: test
+
+  datasource:
+    # Modern Spring Boot 4 + Testcontainers often uses @ServiceConnection
+    # But if using manual config, this driver is correct for the jdbc:tc protocol
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+    url: "jdbc:tc:postgresql:18:///test_db"
+
+  flyway:
+    clean-disabled: false             # Allow clean for integration tests
