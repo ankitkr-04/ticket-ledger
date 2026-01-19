@@ -106,7 +106,7 @@ TTL: 24 hours
 
 ```sql
 CREATE TABLE idempotency_keys (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    id UUID PRIMARY KEY,                   -- Client-provided idempotency key
     user_id UUID NOT NULL,
     request_hash VARCHAR(64),
     response_status INT,
@@ -122,16 +122,16 @@ CREATE INDEX idx_idempotency_expires_at ON idempotency_keys(expires_at);
 
 ### Column Definitions
 
-| Column            | Type          | Constraints                    | Description                                       |
-| ----------------- | ------------- | ------------------------------ | ------------------------------------------------- |
-| `id`              | `UUID`        | `PRIMARY KEY DEFAULT uuidv7()` | UUIDv7 idempotency key identifier                 |
-| `user_id`         | `UUID`        | `NOT NULL`                     | User who initiated the request (for isolation)    |
-| `request_hash`    | `VARCHAR(64)` | `NULL`                         | SHA-256 hash of request body (conflict detection) |
-| `response_status` | `INT`         | `NULL`                         | HTTP status code of original response             |
-| `response_body`   | `JSONB`       | `NULL`                         | Complete response payload (flexible schema)       |
-| `created_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()`                | Initial insert timestamp                          |
-| `updated_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()`                | Last modification timestamp                       |
-| `expires_at`      | `TIMESTAMPTZ` | `NOT NULL`                     | Expiry time for cleanup (created_at + 24h)        |
+| Column            | Type          | Constraints     | Description                                       |
+| ----------------- | ------------- | --------------- | ------------------------------------------------- |
+| `id`              | `UUID`        | `PRIMARY KEY`   | Client-provided idempotency key (from header)     |
+| `user_id`         | `UUID`        | `NOT NULL`      | User who initiated the request (for isolation)    |
+| `request_hash`    | `VARCHAR(64)` | `NULL`          | SHA-256 hash of request body (conflict detection) |
+| `response_status` | `INT`         | `NULL`          | HTTP status code of original response             |
+| `response_body`   | `JSONB`       | `NULL`          | Complete response payload (flexible schema)       |
+| `created_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()` | Initial insert timestamp                          |
+| `updated_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()` | Last modification timestamp                       |
+| `expires_at`      | `TIMESTAMPTZ` | `NOT NULL`      | Expiry time for cleanup (created_at + 24h)        |
 
 ### Index Strategy
 

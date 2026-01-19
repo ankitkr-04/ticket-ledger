@@ -3,19 +3,31 @@ package com.ticketledger.domain.model.entity;
 import java.time.Instant;
 import java.util.UUID;
 
-import com.ticketledger.domain.model.base.BaseEntity;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
+
+import com.fasterxml.jackson.databind.JsonNode;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
 @Table(name = "idempotency_keys")
 @Getter
 @Setter
-public class IdempotencyKey extends BaseEntity {
+@NoArgsConstructor
+public class IdempotencyKey {
+
+    @Id
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;
@@ -26,13 +38,18 @@ public class IdempotencyKey extends BaseEntity {
     @Column(name = "response_status")
     private Integer responseStatus;
 
-    /**
-     * Stored as JSONB in Postgres.
-     * Serialized/deserialized at the application boundary.
-     */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "response_body", columnDefinition = "jsonb")
-    private String responseBody;
+    private JsonNode responseBody;
 
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
 }

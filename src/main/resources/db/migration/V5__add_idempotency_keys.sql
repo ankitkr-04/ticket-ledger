@@ -1,5 +1,5 @@
 CREATE TABLE idempotency_keys (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    id UUID PRIMARY KEY ,
     user_id UUID NOT NULL,
     request_hash VARCHAR(64),
     response_status INT,

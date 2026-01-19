@@ -350,16 +350,16 @@ UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = 'user-uuid';
 
 **Purpose:** Prevent duplicate request processing using database-backed idempotency keys
 
-| Column            | Type          | Constraints                    | Description                                          |
-| ----------------- | ------------- | ------------------------------ | ---------------------------------------------------- |
-| `id`              | `UUID`        | `PRIMARY KEY DEFAULT uuidv7()` | UUIDv7 idempotency key identifier                    |
-| `user_id`         | `UUID`        | `NOT NULL`                     | User who initiated the request (isolation)           |
-| `request_hash`    | `VARCHAR(64)` | `NULL`                         | SHA-256 hash of request payload (conflict detection) |
-| `response_status` | `INT`         | `NULL`                         | HTTP status code of cached response                  |
-| `response_body`   | `JSONB`       | `NULL`                         | Complete response payload                            |
-| `created_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()`                | Initial insert timestamp                             |
-| `updated_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()`                | Last modification timestamp                          |
-| `expires_at`      | `TIMESTAMPTZ` | `NOT NULL`                     | Expiry time for cleanup (created_at + 24h)           |
+| Column            | Type          | Constraints     | Description                                          |
+| ----------------- | ------------- | --------------- | ---------------------------------------------------- |
+| `id`              | `UUID`        | `PRIMARY KEY`   | Client-provided idempotency key (UUID format)        |
+| `user_id`         | `UUID`        | `NOT NULL`      | User who initiated the request (isolation)           |
+| `request_hash`    | `VARCHAR(64)` | `NULL`          | SHA-256 hash of request payload (conflict detection) |
+| `response_status` | `INT`         | `NULL`          | HTTP status code of cached response                  |
+| `response_body`   | `JSONB`       | `NULL`          | Complete response payload                            |
+| `created_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()` | Initial insert timestamp                             |
+| `updated_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()` | Last modification timestamp                          |
+| `expires_at`      | `TIMESTAMPTZ` | `NOT NULL`      | Expiry time for cleanup (created_at + 24h)           |
 
 **Indexes:**
 ```sql
@@ -371,7 +371,7 @@ CREATE INDEX idx_idempotency_expires_at ON idempotency_keys(expires_at);
 ```
 
 **Business Rules:**
-- Primary key constraint provides built-in row-level locking for concurrency
+- Primary key is **client-provided** (sent via `Idempotency-Key` header)
 - INSERT blocks concurrent requests with same key until first transaction commits
 - If transaction rolls back, idempotency key is rolled back (safe retry)
 - Request hash detects payload changes between retries (409 Conflict)
@@ -383,13 +383,12 @@ CREATE INDEX idx_idempotency_expires_at ON idempotency_keys(expires_at);
 ```sql
 -- Request A: BEGIN TRANSACTION
 INSERT INTO idempotency_keys (id, user_id, expires_at)
-VALUES (uuidv7(), 'user-uuid', NOW() + INTERVAL '24 hours');
--- Row locked for generated UUID
+VALUES ('client-provided-uuid', 'user-uuid', NOW() + INTERVAL '24 hours');
+-- Row locked for 'client-provided-uuid'
 
--- Request B (concurrent with same client-provided key): 
--- Maps to same UUID, blocks here ⏸️
+-- Request B (concurrent with same Idempotency-Key): Blocks here ⏸️
 INSERT INTO idempotency_keys (id, user_id, expires_at)
-VALUES (uuidv7(), 'user-uuid', NOW() + INTERVAL '24 hours');
+VALUES ('client-provided-uuid', 'user-uuid', NOW() + INTERVAL '24 hours');
 
 -- Request A: Execute business logic, UPDATE idempotency_keys, COMMIT
 -- Row unlocked
