@@ -1,5 +1,8 @@
 package com.ticketledger.domain.model.entity;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import com.ticketledger.domain.model.base.BaseEntity;
 import com.ticketledger.domain.model.enums.SeatStatus;
 
@@ -34,6 +37,7 @@ public class Seat extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(columnDefinition = "seat_status")
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     private SeatStatus status = SeatStatus.AVAILABLE;
 
     @Version

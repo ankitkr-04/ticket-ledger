@@ -2,6 +2,9 @@ package com.ticketledger.domain.model.entity;
 
 import java.time.Instant;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import com.ticketledger.domain.model.base.BaseEntity;
 import com.ticketledger.domain.model.enums.BookingStatus;
 
@@ -30,6 +33,7 @@ public class Booking extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(columnDefinition = "booking_status")
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     private BookingStatus status = BookingStatus.HELD;
 
     @Column(name = "locked_until")

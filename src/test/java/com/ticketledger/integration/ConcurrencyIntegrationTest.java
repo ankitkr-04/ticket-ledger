@@ -13,28 +13,27 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.utility.TestcontainersConfiguration;
 
 import com.ticketledger.dto.CreateBookingRequest;
 import com.ticketledger.security.JwtService;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureRestTestClient
 @Import(TestcontainersConfiguration.class)
 @ActiveProfiles("test")
 public class ConcurrencyIntegrationTest {
 
-    @LocalServerPort
-    private int port;
-
     @Autowired
-    private TestRestTemplate restTemplate;
+    private RestTestClient restClient;
 
     @Autowired
     private JwtService jwtService;
@@ -48,9 +47,6 @@ public class ConcurrencyIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Generate a valid JWT for the seeded user (test@example.com)
-        // Note: The user is inserted via SQL, so we just need a token that matches the
-        // email.
         authToken = jwtService.generateToken("test@example.com");
     }
 
@@ -59,7 +55,6 @@ public class ConcurrencyIntegrationTest {
     @Sql(scripts = "/sql/clean_test_data.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
     void shouldPreventDoubleBooking_When5ConcurrentRequestsArrive() throws InterruptedException {
 
-        // 1. Prepare Request: 5 Threads trying to book Seat 1 & Seat 2
         List<UUID> targetSeats = List.of(SEAT_1_ID, SEAT_2_ID);
         CreateBookingRequest requestBody = new CreateBookingRequest(SHOWTIME_ID, targetSeats);
 
@@ -71,35 +66,30 @@ public class ConcurrencyIntegrationTest {
         AtomicInteger conflictCount = new AtomicInteger(0);
         AtomicInteger errorCount = new AtomicInteger(0);
 
-        // 2. Fire Requests
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
-                    HttpHeaders headers = new HttpHeaders();
-                    headers.setContentType(MediaType.APPLICATION_JSON);
-                    headers.setBearerAuth(authToken);
-                    // Critical: Each thread acts as a unique request (Unique Idempotency Key)
-                    // If we reused the key, we'd test Idempotency (replay), not Concurrency
-                    // (locking).
-                    headers.set("Idempotency-Key", UUID.randomUUID().toString());
-
-                    HttpEntity<CreateBookingRequest> entity = new HttpEntity<>(requestBody, headers);
-
-                    ResponseEntity<String> response = restTemplate.postForEntity(
-                            "http://localhost:" + port + "/api/v1/bookings",
-                            entity,
-                            String.class);
-
-                    // 3. Tally Results
-                    if (response.getStatusCode() == HttpStatus.CREATED) {
-                        successCount.incrementAndGet();
-                    } else if (response.getStatusCode() == HttpStatus.CONFLICT) {
-                        conflictCount.incrementAndGet();
-                    } else {
-                        System.out
-                                .println("Unexpected Response: " + response.getStatusCode() + " " + response.getBody());
-                        errorCount.incrementAndGet();
-                    }
+                    // Use RestTestClient for the request
+                    restClient.post()
+                            .uri("/api/v1/bookings")
+                            .header("Authorization", "Bearer " + authToken)
+                            .header("Idempotency-Key", UUID.randomUUID().toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body(requestBody)
+                            .exchange()
+                            .expectBody()
+                            .consumeWith(response -> {
+                                int statusCode = response.getStatus().value();
+                                HttpStatus status = HttpStatus.valueOf(statusCode);
+                                if (status == HttpStatus.CREATED) {
+                                    successCount.incrementAndGet();
+                                } else if (status == HttpStatus.CONFLICT) {
+                                    conflictCount.incrementAndGet();
+                                } else {
+                                    System.out.println("Unexpected: " + status);
+                                    errorCount.incrementAndGet();
+                                }
+                            });
                 } catch (Exception e) {
                     e.printStackTrace();
                     errorCount.incrementAndGet();
@@ -109,24 +99,11 @@ public class ConcurrencyIntegrationTest {
             });
         }
 
-        // 4. Wait for completion
         boolean finished = latch.await(10, TimeUnit.SECONDS);
         assertThat(finished).as("Test timed out").isTrue();
 
-        // 5. Verify Invariants
-        // Exactly ONE request should succeed
-        assertThat(successCount.get())
-                .as("Exactly one booking should succeed")
-                .isEqualTo(1);
-
-        // Exactly FOUR requests should fail with 409 Conflict
-        assertThat(conflictCount.get())
-                .as("All other overlapping requests should fail with CONFLICT")
-                .isEqualTo(4);
-
-        // ZERO unexpected errors (500s, 400s)
-        assertThat(errorCount.get())
-                .as("There should be no unexpected errors")
-                .isEqualTo(0);
+        assertThat(successCount.get()).as("Only one booking should succeed").isEqualTo(1);
+        assertThat(conflictCount.get()).as("Others should fail with CONFLICT").isEqualTo(4);
+        assertThat(errorCount.get()).as("No unexpected errors").isEqualTo(0);
     }
 }

@@ -44,6 +44,7 @@ public class Payment extends BaseEntity {
     private String method;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(columnDefinition = "payment_status")
     private PaymentStatus status = PaymentStatus.PENDING;
 

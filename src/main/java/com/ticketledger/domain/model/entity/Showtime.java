@@ -2,8 +2,10 @@ package com.ticketledger.domain.model.entity;
 
 import java.time.Instant;
 
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
+import org.hibernate.type.SqlTypes;
 
 import com.ticketledger.domain.model.base.SoftDeletableEntity;
 import com.ticketledger.domain.model.enums.ShowtimeStatus;
@@ -43,6 +45,7 @@ public class Showtime extends SoftDeletableEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(columnDefinition = "showtime_status")
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     private ShowtimeStatus status = ShowtimeStatus.ACTIVE;
 
     public void checkBookable() {

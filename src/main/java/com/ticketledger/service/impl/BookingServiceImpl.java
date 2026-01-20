@@ -15,8 +15,6 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketledger.config.BookingProperties;
 import com.ticketledger.domain.model.entity.*;
 import com.ticketledger.domain.model.enums.BookingStatus;
@@ -34,6 +32,8 @@ import com.ticketledger.service.BookingService;
 import com.ticketledger.service.IdempotencyService;
 
 import lombok.RequiredArgsConstructor;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -49,7 +49,7 @@ public class BookingServiceImpl implements BookingService {
         private final BookingProperties bookingProperties;
 
         private final IdempotencyService idempotencyService;
-        private final ObjectMapper objectMapper;
+        private final JsonMapper jsonMapper;
 
         @Override
         @Transactional(isolation = Isolation.REPEATABLE_READ)
@@ -220,7 +220,7 @@ public class BookingServiceImpl implements BookingService {
                 // secrets for this internal view
                 var response = BookingResponse.fromEntity(booking, bookingSeats, payment);
 
-                JsonNode requestJson = objectMapper.valueToTree(response);
+                JsonNode requestJson = jsonMapper.valueToTree(response);
                 idempotencyService.saveResponse(idempotencyKey, HttpStatus.CREATED.value(), requestJson);
                 return response;
         }
@@ -266,7 +266,7 @@ public class BookingServiceImpl implements BookingService {
                         var combined = Map.of(
                                         "userId", userId,
                                         "request", request);
-                        String jsonString = objectMapper.writeValueAsString(combined);
+                        String jsonString = jsonMapper.writeValueAsString(combined);
                         MessageDigest digest = MessageDigest.getInstance("SHA-256");
                         byte[] hashBytes = digest.digest(jsonString.getBytes(StandardCharsets.UTF_8));
 
@@ -291,7 +291,7 @@ public class BookingServiceImpl implements BookingService {
 
                 var existingKey = existingKeyOpt.get();
                 try {
-                        return objectMapper.treeToValue(existingKey.getResponseBody(), BookingResponse.class);
+                        return jsonMapper.treeToValue(existingKey.getResponseBody(), BookingResponse.class);
                 } catch (Exception e) {
                         throw new BusinessException(
                                         "Failed to deserialize idempotent response",
