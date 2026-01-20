@@ -30,15 +30,65 @@ This document defines the **allowed and denied state transitions** for all entit
 
 ### 📝 Booking States
 
-| State             | Description                                       |
-| ----------------- | ------------------------------------------------- |
-| `HELD`            | Booking created, seats reserved, awaiting payment |
-| `CONFIRMED`       | Payment successful, booking finalized             |
-| `EXPIRED`         | Hold duration exceeded, booking invalidated       |
-| `CANCELLED`       | User-initiated cancellation after confirmation    |
-| `COMPLETED`       | Showtime passed, booking lifecycle ended          |
-| `REFUND_REQUIRED` | Payment succeeded but booking integrity violated  |
+| State              | Description                                                            |
+| ------------------ | ---------------------------------------------------------------------- |
+| `HELD`             | Booking created, seats reserved, awaiting payment                      |
+| `CONFIRMED`        | Payment successful, booking finalized                                  |
+| `EXPIRED`          | Hold duration exceeded, booking invalidated                            |
+| `CANCELLED`        | User-initiated cancellation (pre-refund or within cancellation window) |
+| `REFUND_INITIATED` | Admin refund in progress, row locked, awaiting Stripe response         |
+| `REFUNDED`         | Funds returned to user, financial ledger settled                       |
+| `COMPLETED`        | Showtime passed, booking lifecycle ended                               |
+| `REFUND_REQUIRED`  | Payment succeeded but booking integrity violated                       |
+#### State Disambiguation: CANCELLED vs REFUNDED
 
+**CANCELLED:**
+- **Actor:** User-initiated or system timeout
+- **Financial State:** May or may not involve refund (depends on cancellation policy)
+- **Use Case:** User cancels before showtime (within refund window)
+- **Seats:** Released back to AVAILABLE pool
+
+**REFUNDED:**
+- **Actor:** Admin-initiated privileged operation
+- **Financial State:** Funds **explicitly returned** via payment gateway
+- **Use Case:** Admin compensation, show cancellation, integrity violation
+- **Seats:** Released back to AVAILABLE pool
+- **Audit:** Requires reason and admin accountability trail
+
+**Key Difference:** `REFUNDED` is unambiguous about financial settlement. `CANCELLED` may just mean "booking voided" without money movement.
+
+#### REFUND_INITIATED: The Transient Lock State
+
+**Purpose:** Prevent race conditions during admin refund operations.
+
+**Behavior:**
+- **Blocks Entry:** Users cannot scan this booking at showtime entry
+- **Blocks Cancellation:** Users cannot cancel while admin refund is in-flight
+- **Blocks Concurrent Refunds:** Second admin attempting refund receives `423 LOCKED`
+- **Duration:** Held only during external Stripe API call (typically 1-3 seconds)
+
+**Why Needed:**
+Without this state, the following race occurs:
+```
+T1: Admin starts refund (booking still CONFIRMED)
+T2: User scans ticket at entrance (entry allowed)
+T3: Stripe refund succeeds
+T4: Admin updates booking to REFUNDED
+Result: User entered show but got refunded 💥
+```
+
+With `REFUND_INITIATED`:
+```
+T1: Admin starts refund (booking → REFUND_INITIATED)
+T2: User scans ticket (entry DENIED: booking is being refunded)
+T3: Stripe refund succeeds
+T4: Admin updates booking to REFUNDED
+Result: Consistent state ✅
+```
+
+**Recovery:** If admin process crashes during `REFUND_INITIATED`, reconciliation job detects orphaned state and either:
+- Completes refund (if Stripe succeeded)
+- Rolls back to CONFIRMED (if Stripe failed)
 ### 💳 Payment States
 
 | State      | Description                                      |
@@ -130,38 +180,50 @@ graph LR
 graph TD
     H[HELD] -->|payment success| C[CONFIRMED]
     H -->|timeout| E[EXPIRED]
-    C -->|user action| CA[CANCELLED]
+    C -->|user cancellation| CA[CANCELLED]
+    C -->|admin refund| RI[REFUND_INITIATED]
+    RI -->|stripe success| RF[REFUNDED]
     C -->|showtime passed| CO[COMPLETED]
-    E -->|late payment| R[REFUND_REQUIRED]
-    C -->|integrity violation| R
+    CO -->|admin refund| RI
+    E -->|late payment| RR[REFUND_REQUIRED]
+    C -->|integrity violation| RR
     
     style H fill:#FFD700
     style C fill:#90EE90
     style E fill:#FF6B6B
     style CA fill:#FF6B6B
+    style RI fill:#FFA500
+    style RF fill:#808080
     style CO fill:#808080
-    style R fill:#FFA500
+    style RR fill:#FFA500
 ```
 
-| From        | To                | Trigger                             |
-| ----------- | ----------------- | ----------------------------------- |
-| `HELD`      | `CONFIRMED`       | Payment succeeds within hold window |
-| `HELD`      | `EXPIRED`         | Hold duration exceeded              |
-| `CONFIRMED` | `CANCELLED`       | User cancels confirmed booking      |
-| `CONFIRMED` | `COMPLETED`       | Showtime has passed                 |
-| `EXPIRED`   | `REFUND_REQUIRED` | Late payment after hold expiry      |
-| `CONFIRMED` | `REFUND_REQUIRED` | System integrity violation          |
+| From               | To                 | Trigger                                |
+| ------------------ | ------------------ | -------------------------------------- |
+| `HELD`             | `CONFIRMED`        | Payment succeeds within hold window    |
+| `HELD`             | `EXPIRED`          | Hold duration exceeded                 |
+| `CONFIRMED`        | `CANCELLED`        | User cancels confirmed booking         |
+| `CONFIRMED`        | `REFUND_INITIATED` | Admin initiates refund (locks row)     |
+| `REFUND_INITIATED` | `REFUNDED`         | Stripe refund succeeds                 |
+| `CONFIRMED`        | `COMPLETED`        | Showtime has passed                    |
+| `COMPLETED`        | `REFUND_INITIATED` | Admin initiates refund (post-showtime) |
+| `EXPIRED`          | `REFUND_REQUIRED`  | Late payment after hold expiry         |
+| `CONFIRMED`        | `REFUND_REQUIRED`  | System integrity violation             |
 
 ### ❌ Denied Transitions
 
 > **Rule:** Booking state is append-only in intent. You never "revive" a dead booking.
 
-| From              | To          | Reason                             |
-| ----------------- | ----------- | ---------------------------------- |
-| `EXPIRED`         | `CONFIRMED` | ⚠️ Cannot resurrect expired booking |
-| `CANCELLED`       | `CONFIRMED` | ⚠️ Cannot un-cancel booking         |
-| `COMPLETED`       | `ANY`       | ⚠️ Terminal state - lifecycle ended |
-| `REFUND_REQUIRED` | `CONFIRMED` | ⚠️ Refund is irreversible           |
+| From               | To                              | Reason                                                            |
+| ------------------ | ------------------------------- | ----------------------------------------------------------------- |
+| `EXPIRED`          | `CONFIRMED`                     | ⚠️ Cannot resurrect expired booking                                |
+| `CANCELLED`        | `CONFIRMED`                     | ⚠️ Cannot un-cancel booking                                        |
+| `HELD`             | `REFUNDED`                      | ⚠️ Cannot refund unpaid booking (must go through REFUND_INITIATED) |
+| `EXPIRED`          | `REFUNDED`                      | ⚠️ Cannot refund expired booking                                   |
+| `REFUND_INITIATED` | `CONFIRMED`                     | ⚠️ Cannot rollback initiated refund                                |
+| `REFUNDED`         | `ANY`                           | ⚠️ Terminal state - refund completed                               |
+| `COMPLETED`        | `ANY (except REFUND_INITIATED)` | ⚠️ Can only refund after completion                                |
+| `REFUND_REQUIRED`  | `CONFIRMED`                     | ⚠️ Refund is irreversible                                          |
 
 ---
 
@@ -259,12 +321,12 @@ graph LR
 
 ## 📊 State Machine Summary
 
-| Entity       | States | Terminal States                | Reversible?              |
-| ------------ | ------ | ------------------------------ | ------------------------ |
-| **Seat**     | 3      | None                           | ✅ Yes (via cancellation) |
-| **Booking**  | 6      | `COMPLETED`, `REFUND_REQUIRED` | ❌ No                     |
-| **Payment**  | 4      | `REFUNDED`                     | ❌ No (except refund)     |
-| **Showtime** | 3      | `INACTIVE`                     | ❌ No                     |
+| Entity       | States | Terminal States                            | Reversible?              |
+| ------------ | ------ | ------------------------------------------ | ------------------------ |
+| **Seat**     | 3      | None                                       | ✅ Yes (via cancellation) |
+| **Booking**  | 8      | `REFUNDED`, `COMPLETED`, `REFUND_REQUIRED` | ❌ No                     |
+| **Payment**  | 4      | `REFUNDED`                                 | ❌ No (except refund)     |
+| **Showtime** | 3      | `INACTIVE`                                 | ❌ No                     |
 
 ---
 

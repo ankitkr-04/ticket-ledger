@@ -9,5 +9,7 @@ public enum BookingStatus {
     EXPIRED,
     CANCELLED,
     COMPLETED,
-    REFUND_REQUIRED
+    REFUND_REQUIRED,
+    REFUND_INITIATED,
+    REFUNDED
 }

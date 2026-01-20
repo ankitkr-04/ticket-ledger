@@ -1179,6 +1179,276 @@ public BookingResponse getBooking(@PathVariable UUID id) {
 
 ---
 
+## �‍💼 Admin Workflows
+
+### 1. Manual Refund
+
+**Endpoint:** `POST /admin/bookings/{bookingId}/refund`
+
+**Purpose:** Process a manual refund for a confirmed booking (privileged operation with strict consistency guarantees)
+
+**Authorization:** Requires `role = ADMIN`
+
+**Headers:**
+```http
+Authorization: Bearer <admin-jwt>
+Idempotency-Key: admin-refund-{bookingId}-{timestamp}
+Content-Type: application/json
+```
+
+**Path Parameters:**
+
+| Parameter   | Type     | Required | Description     |
+| ----------- | -------- | -------- | --------------- |
+| `bookingId` | `string` | ✅        | UUID of booking |
+
+**Request Body:**
+```json
+{
+  "reason": "Customer complaint - show cancelled by theater"
+}
+```
+
+**Request Schema:**
+
+| Field    | Type     | Required | Constraints | Description             |
+| -------- | -------- | -------- | ----------- | ----------------------- |
+| `reason` | `string` | ✅        | 1-500 chars | Audit trail description |
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "refundId": "refund-uuid-123",
+    "bookingId": "booking-uuid-456",
+    "amount": 450.00,
+    "status": "COMPLETED",
+    "stripeRefundId": "re_1234567890",
+    "processedAt": "2026-01-20T10:30:00Z",
+    "processedBy": {
+      "adminId": "admin-uuid-789",
+      "email": "admin@ticketledger.com"
+    }
+  },
+  "meta": {
+    "timestamp": "2026-01-20T10:30:00Z",
+    "requestId": "req-admin-refund-001"
+  }
+}
+```
+
+**Error Responses:**
+
+| Status | Error Code                 | Description                                                     |
+| ------ | -------------------------- | --------------------------------------------------------------- |
+| `400`  | `INVALID_REQUEST`          | Missing required fields                                         |
+| `401`  | `UNAUTHORIZED`             | Missing or invalid admin token                                  |
+| `403`  | `INSUFFICIENT_PERMISSIONS` | User is not an admin                                            |
+| `404`  | `BOOKING_NOT_FOUND`        | Booking does not exist                                          |
+| `409`  | `INVALID_STATE_TRANSITION` | Booking is not in a refundable state (e.g., PENDING, CANCELLED) |
+| `409`  | `REFUND_ALREADY_PENDING`   | Another refund request is already being processed               |
+| `409`  | `IDEMPOTENCY_CONFLICT`     | Same key used with different request body                       |
+| `423`  | `BOOKING_LOCKED`           | Booking is currently being processed by another admin/job       |
+
+**Example Error (409 - Invalid State):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_STATE_TRANSITION",
+    "message": "Cannot refund booking in PENDING state. Use cancel instead.",
+    "context": {
+      "currentState": "PENDING",
+      "allowedStates": ["CONFIRMED", "COMPLETED"]
+    },
+    "requestId": "req-admin-refund-002"
+  },
+  "meta": {
+    "timestamp": "2026-01-20T10:31:00Z"
+  }
+}
+```
+
+**Example Error (423 - Locked):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BOOKING_LOCKED",
+    "message": "Booking is currently being processed by another admin/job.",
+    "context": {
+      "retryAfter": 30,
+      "lockedBy": "system-job-expiry-cleanup"
+    },
+    "requestId": "req-admin-refund-003"
+  },
+  "meta": {
+    "timestamp": "2026-01-20T10:32:00Z"
+  }
+}
+```
+
+**Idempotency Behavior:**
+- Admin refunds are idempotent using the `Idempotency-Key` header
+- If the same key is used with the same request body, the cached response is returned
+- If the same key is used with a different body, a `409 IDEMPOTENCY_CONFLICT` error is returned
+- Idempotency keys are stored for 24 hours after successful refund
+
+**State Transition Rules:**
+```mermaid
+stateDiagram-v2
+    [*] --> CONFIRMED
+    [*] --> COMPLETED
+    CONFIRMED --> REFUNDED: admin_refund
+    COMPLETED --> REFUNDED: admin_refund
+    
+    note right of PENDING: ❌ Cannot refund PENDING
+    note right of CANCELLED: ❌ Cannot refund CANCELLED
+    note right of FAILED: ❌ Cannot refund FAILED
+```
+
+**Concurrency Guarantees:**
+- Uses pessimistic row-level locking (`SELECT ... FOR UPDATE NOWAIT`)
+- If a user payment is in-flight, admin receives `423 BOOKING_LOCKED` error
+- Two concurrent admin refund attempts will result in one succeeding and the other receiving `423 BOOKING_LOCKED`
+
+---
+
+### 2. Update Showtime Status
+
+**Endpoint:** `PATCH /admin/showtimes/{showtimeId}/status`
+
+**Purpose:** Pause or reactivate a showtime (triggers automatic cleanup of pending bookings when paused)
+
+**Authorization:** Requires `role = ADMIN`
+
+**Headers:**
+```http
+Authorization: Bearer <admin-jwt>
+Content-Type: application/json
+```
+
+**Path Parameters:**
+
+| Parameter    | Type     | Required | Description      |
+| ------------ | -------- | -------- | ---------------- |
+| `showtimeId` | `string` | ✅        | UUID of showtime |
+
+**Request Body:**
+```json
+{
+  "status": "PAUSED"
+}
+```
+
+**Request Schema:**
+
+| Field    | Type   | Required | Constraints          | Description         |
+| -------- | ------ | -------- | -------------------- | ------------------- |
+| `status` | `enum` | ✅        | `ACTIVE` or `PAUSED` | New showtime status |
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "showtimeId": "showtime-uuid-123",
+    "status": "PAUSED",
+    "updatedAt": "2026-01-20T10:35:00Z",
+    "updatedBy": {
+      "adminId": "admin-uuid-789",
+      "email": "admin@ticketledger.com"
+    },
+    "affectedBookings": {
+      "totalExpired": 12,
+      "seatsReleased": 45
+    }
+  },
+  "meta": {
+    "timestamp": "2026-01-20T10:35:00Z",
+    "requestId": "req-admin-status-001"
+  }
+}
+```
+
+**Response Schema (`ShowtimeStatusResponse`):**
+
+| Field                            | Type            | Description                              |
+| -------------------------------- | --------------- | ---------------------------------------- |
+| `showtimeId`                     | `string (UUID)` | Showtime identifier                      |
+| `status`                         | `enum`          | New status: `ACTIVE` or `PAUSED`         |
+| `updatedAt`                      | `ISO-8601`      | Timestamp of status change               |
+| `updatedBy.adminId`              | `string (UUID)` | Admin who made the change                |
+| `updatedBy.email`                | `string`        | Admin email                              |
+| `affectedBookings.totalExpired`  | `integer`       | Number of PENDING bookings force-expired |
+| `affectedBookings.seatsReleased` | `integer`       | Total seats returned to available pool   |
+
+**Error Responses:**
+
+| Status | Error Code                 | Description                                    |
+| ------ | -------------------------- | ---------------------------------------------- |
+| `400`  | `INVALID_REQUEST`          | Invalid status value                           |
+| `401`  | `UNAUTHORIZED`             | Missing or invalid admin token                 |
+| `403`  | `INSUFFICIENT_PERMISSIONS` | User is not an admin                           |
+| `404`  | `SHOWTIME_NOT_FOUND`       | Showtime does not exist                        |
+| `409`  | `SHOWTIME_ALREADY_PAUSED`  | Attempting to pause an already paused showtime |
+
+**Behavior When Setting `PAUSED`:**
+
+This operation triggers the **"Kill" logic** for all pending bookings associated with this showtime:
+
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant API
+    participant DB
+    participant Jobs
+
+    Admin->>API: PATCH /admin/showtimes/{id}/status {PAUSED}
+    API->>DB: BEGIN TRANSACTION
+    API->>DB: UPDATE showtimes SET status='PAUSED'
+    API->>DB: SELECT pending bookings FOR UPDATE
+    loop For each PENDING booking
+        API->>DB: UPDATE booking status = EXPIRED
+        API->>DB: UPDATE seats status = AVAILABLE
+    end
+    API->>DB: COMMIT
+    API-->>Admin: 200 OK (affectedBookings: {totalExpired: N})
+```
+
+**Atomic Guarantees:**
+- All pending bookings are force-expired in a **single transaction**
+- Seats are released back to `AVAILABLE` pool atomically
+- If transaction fails, showtime status remains unchanged
+- No partial state transitions (all-or-nothing)
+
+**Example Error (409 - Already Paused):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "SHOWTIME_ALREADY_PAUSED",
+    "message": "Showtime is already paused.",
+    "context": {
+      "currentStatus": "PAUSED",
+      "pausedAt": "2026-01-20T09:00:00Z"
+    },
+    "requestId": "req-admin-status-002"
+  },
+  "meta": {
+    "timestamp": "2026-01-20T10:36:00Z"
+  }
+}
+```
+
+**Use Cases:**
+- **Theater Emergency:** Theater reports technical issue, admin pauses showtime to prevent new bookings and release held seats
+- **Cancellation:** Movie distributor cancels show, admin pauses and processes refunds for confirmed bookings
+- **Capacity Management:** Admin temporarily pauses during peak load to prevent overselling
+
+---
+
 ## 📊 HTTP Status Code Guide
 
 | Status                      | Usage                                 | Example                       |
@@ -1191,8 +1461,11 @@ public BookingResponse getBooking(@PathVariable UUID id) {
 | `404 Not Found`             | Resource doesn't exist                | Invalid booking ID            |
 | `409 Conflict`              | Business rule violation               | Seat already booked           |
 | `422 Unprocessable Entity`  | Semantic error                        | Booking expired showtime      |
+| `423 Locked`                | Resource currently locked             | Admin refund during payment   |
 | `500 Internal Server Error` | Unhandled exception                   | Database down                 |
 | `503 Service Unavailable`   | Downstream service down               | Payment gateway timeout       |
+
+---
 
 ---
 
@@ -1202,6 +1475,7 @@ public BookingResponse getBooking(@PathVariable UUID id) {
 - **Transaction Flows:** See `03_sequence_flows.md`
 - **Database Schema:** See `04_database_schema.md`
 - **Error Handling:** See `06_error_handling.md`
+- **Admin Workflows:** See `07_admin_workflows.md`
 
 ---
 
@@ -1218,3 +1492,6 @@ public BookingResponse getBooking(@PathVariable UUID id) {
 - [x] Token lifecycle and rotation strategy documented
 - [x] Error responses defined
 - [x] Security guidelines established
+- [x] Admin endpoints documented (refund, showtime status)
+- [x] Admin idempotency requirements defined
+- [x] 423 LOCKED status code added for concurrency conflicts
