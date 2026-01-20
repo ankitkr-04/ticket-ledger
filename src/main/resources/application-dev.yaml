@@ -14,6 +14,11 @@ spring:
           format_sql: true  # Format SQL statements for better readability
           use_sql_comments: true  # Add comments to SQL for easier debugging
           highlight_sql: true  # Highlight SQL keywords in the console
+          jdbc:
+            batch_size: 50
+            order_updates: true
+            order_inserts: true
+
 
 logging:
      level:

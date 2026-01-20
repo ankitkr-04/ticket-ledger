@@ -1,0 +1,43 @@
+package com.ticketledger.service.scheduler;
+
+import java.time.Instant;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import com.ticketledger.domain.model.enums.BookingStatus;
+import com.ticketledger.domain.repository.BookingRepository;
+import com.ticketledger.service.BookingService;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class BookingCleanupScheduler {
+    private final BookingService bookingService;
+    private final BookingRepository bookingRepository;
+
+    @Scheduled(fixedDelayString = "60000") // every 60 seconds
+    public void cleanupExpiredBookings() {
+        var expiredBookings = bookingRepository.findByStatusAndLockedUntilBefore(
+                BookingStatus.HELD,
+                Instant.now(),
+                PageRequest.of(0, 50));
+
+        if (expiredBookings.isEmpty()) {
+            log.info("No expired bookings found for cleanup.");
+            return;
+        }
+
+        for (var booking : expiredBookings) {
+            try {
+                bookingService.expireBooking(booking.getId());
+            } catch (Exception e) {
+                log.error("Failed to expire booking with ID: {}", booking.getId(), e);
+            }
+        }
+    }
+}
