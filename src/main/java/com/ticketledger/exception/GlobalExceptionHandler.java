@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.jspecify.annotations.Nullable;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -70,6 +71,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                         requestId, // Request ID
                         null // Context (optional)
                 ));
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<Object> handleConcurrencyFailure(
+            Exception ex, HttpServletRequest request) {
+        return buildResponse(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "CONCURRENCY_FAILURE",
+                "The resource is currently locked. Please try again later.",
+                null,
+                request);
     }
 
     // 4. Handle Standard Spring MVC Exceptions (405, 415, etc.)

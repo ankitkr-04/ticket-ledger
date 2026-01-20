@@ -83,6 +83,8 @@ public class BookingServiceImpl implements BookingService {
                 // 3. Handle Payment Success
                 if (request.status() == PaymentStatus.SUCCESS) {
                         payment.setStatus(PaymentStatus.SUCCESS);
+                        payment.setProviderTransactionId(request.providerTransactionId());
+                        payment.setProviderCapturedAt(Instant.now());
                         paymentRepository.save(payment);
 
                         if (booking.getStatus() == BookingStatus.HELD) {

@@ -1,0 +1,1 @@
+TRUNCATE TABLE payments, booking_seats, bookings, seats, showtimes, seat_tiers, screens, movies, users, refresh_tokens, idempotency_keys CASCADE;

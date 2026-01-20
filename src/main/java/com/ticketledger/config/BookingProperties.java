@@ -6,7 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "booking")
 public record BookingProperties(
-        int lockDurationMinutes,
-        BigDecimal defaultBasePrice,
-        String currency) {
+                int lockDurationMinutes,
+                BigDecimal defaultBasePrice,
+                String currency,
+                long cleanupIntervalMs) {
 }

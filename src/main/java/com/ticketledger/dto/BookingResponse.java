@@ -10,6 +10,7 @@ import com.ticketledger.domain.model.entity.Booking;
 import com.ticketledger.domain.model.entity.BookingSeat;
 import com.ticketledger.domain.model.entity.Payment;
 import com.ticketledger.domain.model.enums.BookingStatus;
+import com.ticketledger.domain.model.enums.PaymentProvider;
 import com.ticketledger.domain.model.enums.PaymentStatus;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -83,7 +84,7 @@ public record BookingResponse(
 
         public record PaymentDetails(
                         UUID paymentId,
-                        String provider,
+                        PaymentProvider provider,
                         PaymentStatus status,
                         String method,
                         String clientSecret,

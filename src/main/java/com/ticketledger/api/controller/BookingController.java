@@ -27,7 +27,7 @@ public class BookingController {
     @PostMapping
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(
             @Valid @RequestBody CreateBookingRequest request,
-            @RequestHeader(name = "Idempotency-Key", required = false) UUID idempotencyKey,
+            @RequestHeader(name = "Idempotency-Key", required = true) UUID idempotencyKey,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         BookingResponse booking = bookingService.createBooking(request, currentUser.getId(), idempotencyKey);

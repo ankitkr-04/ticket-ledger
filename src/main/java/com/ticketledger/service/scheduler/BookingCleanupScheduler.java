@@ -6,6 +6,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.ticketledger.config.BookingProperties;
 import com.ticketledger.domain.model.enums.BookingStatus;
 import com.ticketledger.domain.repository.BookingRepository;
 import com.ticketledger.service.BookingService;
@@ -19,8 +20,9 @@ import lombok.extern.slf4j.Slf4j;
 public class BookingCleanupScheduler {
     private final BookingService bookingService;
     private final BookingRepository bookingRepository;
+    private final BookingProperties bookingProperties;
 
-    @Scheduled(fixedDelayString = "60000") // every 60 seconds
+    @Scheduled(fixedDelayString = "${booking.cleanup-interval-ms:60000}") // every 60 seconds by default
     public void cleanupExpiredBookings() {
         var expiredBookings = bookingRepository.findByStatusAndLockedUntilBefore(
                 BookingStatus.HELD,
