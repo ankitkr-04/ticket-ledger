@@ -30,3 +30,8 @@ spring:
     enabled: true
     baseline-on-migrate: true
     locations: "classpath:db/migration"
+
+logging:
+  pattern:
+    # Use 'console' to define the full log line format
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr([${spring.application.name:ticket-ledger},%X{traceId:-},%X{spanId:-}]){yellow} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"

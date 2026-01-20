@@ -36,6 +36,8 @@ dependencies {
 	implementation 'org.flywaydb:flyway-database-postgresql'
 	implementation 'com.fasterxml.uuid:java-uuid-generator:5.2.0'
 
+	implementation 'io.micrometer:micrometer-tracing-bridge-brave:1.6.2'
+
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 	developmentOnly 'me.paulschwarz:springboot4-dotenv:5.1.0'
 
