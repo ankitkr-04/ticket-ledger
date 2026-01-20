@@ -1,4 +1,4 @@
-package com.ticketledger.domain.model.entity;
+package com.ticketledger.domain.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -6,7 +6,7 @@ import org.hibernate.annotations.*;
 
 import java.math.*;
 
-import com.ticketledger.domain.model.base.SoftDeletableEntity;
+import com.ticketledger.domain.base.SoftDeletableEntity;
 
 /**
  * Represents a pricing tier for seats (e.g., VIP, Regular, Balcony).

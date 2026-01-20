@@ -1,10 +1,10 @@
-package com.ticketledger.domain.model.entity;
+package com.ticketledger.domain.entity;
 
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import com.ticketledger.domain.model.base.BaseEntity;
-import com.ticketledger.domain.model.enums.SeatStatus;
+import com.ticketledger.domain.base.BaseEntity;
+import com.ticketledger.domain.enums.SeatStatus;
 
 import jakarta.persistence.*;
 import lombok.Getter;

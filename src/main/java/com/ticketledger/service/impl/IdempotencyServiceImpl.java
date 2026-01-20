@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ticketledger.domain.model.entity.IdempotencyKey;
+import com.ticketledger.domain.entity.IdempotencyKey;
 import com.ticketledger.domain.repository.IdempotencyKeyRepository;
 import com.ticketledger.exception.BusinessException;
 import com.ticketledger.exception.IdempotencyConflictException;

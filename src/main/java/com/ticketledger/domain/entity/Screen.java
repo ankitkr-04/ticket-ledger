@@ -1,10 +1,10 @@
-package com.ticketledger.domain.model.entity;
+package com.ticketledger.domain.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.*;
 
-import com.ticketledger.domain.model.base.SoftDeletableEntity;
+import com.ticketledger.domain.base.SoftDeletableEntity;
 
 /**
  * Represents a physical screening room in the theater.

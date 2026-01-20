@@ -11,9 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketledger.config.JwtProperties;
-import com.ticketledger.domain.model.entity.RefreshToken;
-import com.ticketledger.domain.model.entity.User;
-import com.ticketledger.domain.model.enums.UserRole;
+import com.ticketledger.domain.entity.RefreshToken;
+import com.ticketledger.domain.entity.User;
+import com.ticketledger.domain.enums.UserRole;
 import com.ticketledger.domain.repository.RefreshTokenRepository;
 import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.dto.AuthResponse;

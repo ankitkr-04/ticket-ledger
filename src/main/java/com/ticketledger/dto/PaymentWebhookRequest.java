@@ -2,7 +2,7 @@ package com.ticketledger.dto;
 
 import java.util.UUID;
 
-import com.ticketledger.domain.model.enums.PaymentStatus;
+import com.ticketledger.domain.enums.PaymentStatus;
 
 import jakarta.validation.constraints.NotNull;
 

@@ -9,8 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.stereotype.Repository;
 
-import com.ticketledger.domain.model.entity.Seat;
-import com.ticketledger.domain.model.enums.SeatStatus;
+import com.ticketledger.domain.entity.Seat;
+import com.ticketledger.domain.enums.SeatStatus;
 
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;

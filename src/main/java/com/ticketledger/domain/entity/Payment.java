@@ -1,4 +1,4 @@
-package com.ticketledger.domain.model.entity;
+package com.ticketledger.domain.entity;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -7,9 +7,9 @@ import java.util.Map;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import com.ticketledger.domain.model.base.BaseEntity;
-import com.ticketledger.domain.model.enums.PaymentProvider;
-import com.ticketledger.domain.model.enums.PaymentStatus;
+import com.ticketledger.domain.base.BaseEntity;
+import com.ticketledger.domain.enums.PaymentProvider;
+import com.ticketledger.domain.enums.PaymentStatus;
 
 import jakarta.persistence.*;
 import lombok.Getter;

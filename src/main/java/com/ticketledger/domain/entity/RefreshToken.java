@@ -1,8 +1,8 @@
-package com.ticketledger.domain.model.entity;
+package com.ticketledger.domain.entity;
 
 import java.time.Instant;
 
-import com.ticketledger.domain.model.base.BaseEntity;
+import com.ticketledger.domain.base.BaseEntity;
 
 import jakarta.persistence.*;
 import lombok.Getter;

@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
-import com.ticketledger.domain.model.entity.IdempotencyKey;
+import com.ticketledger.domain.entity.IdempotencyKey;
 
 @Repository
 public interface IdempotencyKeyRepository

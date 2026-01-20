@@ -1,4 +1,4 @@
-package com.ticketledger.domain.model.key;
+package com.ticketledger.domain.key;
 
 import java.io.Serializable;
 import java.util.UUID;

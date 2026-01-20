@@ -1,4 +1,4 @@
-package com.ticketledger.domain.model.base;
+package com.ticketledger.domain.base;
 
 import jakarta.persistence.*;
 import lombok.*;

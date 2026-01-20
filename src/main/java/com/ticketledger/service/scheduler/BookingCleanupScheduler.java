@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.ticketledger.config.BookingProperties;
-import com.ticketledger.domain.model.enums.BookingStatus;
+import com.ticketledger.domain.enums.BookingStatus;
 import com.ticketledger.domain.repository.BookingRepository;
 import com.ticketledger.service.BookingService;
 

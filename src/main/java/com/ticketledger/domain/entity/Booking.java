@@ -1,12 +1,12 @@
-package com.ticketledger.domain.model.entity;
+package com.ticketledger.domain.entity;
 
 import java.time.Instant;
 
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import com.ticketledger.domain.model.base.BaseEntity;
-import com.ticketledger.domain.model.enums.BookingStatus;
+import com.ticketledger.domain.base.BaseEntity;
+import com.ticketledger.domain.enums.BookingStatus;
 
 import jakarta.persistence.*;
 import lombok.Getter;

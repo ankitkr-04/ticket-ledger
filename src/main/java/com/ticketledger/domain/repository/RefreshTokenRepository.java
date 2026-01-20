@@ -9,8 +9,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
-import com.ticketledger.domain.model.entity.RefreshToken;
-import com.ticketledger.domain.model.entity.User;
+import com.ticketledger.domain.entity.RefreshToken;
+import com.ticketledger.domain.entity.User;
 
 @Repository
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID> {

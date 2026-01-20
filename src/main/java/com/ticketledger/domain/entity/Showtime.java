@@ -1,4 +1,4 @@
-package com.ticketledger.domain.model.entity;
+package com.ticketledger.domain.entity;
 
 import java.time.Instant;
 
@@ -7,8 +7,8 @@ import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.type.SqlTypes;
 
-import com.ticketledger.domain.model.base.SoftDeletableEntity;
-import com.ticketledger.domain.model.enums.ShowtimeStatus;
+import com.ticketledger.domain.base.SoftDeletableEntity;
+import com.ticketledger.domain.enums.ShowtimeStatus;
 import com.ticketledger.exception.ShowtimeClosedException;
 import com.ticketledger.exception.ShowtimeExpiredException;
 

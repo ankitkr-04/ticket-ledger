@@ -1,12 +1,12 @@
-package com.ticketledger.domain.model.entity;
+package com.ticketledger.domain.entity;
 
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.type.SqlTypes;
 
-import com.ticketledger.domain.model.base.SoftDeletableEntity;
-import com.ticketledger.domain.model.enums.UserRole;
+import com.ticketledger.domain.base.SoftDeletableEntity;
+import com.ticketledger.domain.enums.UserRole;
 
 import jakarta.persistence.*;
 import lombok.Getter;

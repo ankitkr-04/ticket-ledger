@@ -1,11 +1,11 @@
-package com.ticketledger.domain.model.entity;
+package com.ticketledger.domain.entity;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 import org.hibernate.annotations.CreationTimestamp;
 
-import com.ticketledger.domain.model.key.BookingSeatId;
+import com.ticketledger.domain.key.BookingSeatId;
 
 import jakarta.persistence.*;
 import lombok.Getter;

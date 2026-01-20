@@ -5,7 +5,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 
-import com.ticketledger.domain.model.enums.ShowtimeStatus;
+import com.ticketledger.domain.enums.ShowtimeStatus;
 
 public class ShowtimeClosedException extends TicketLedgerException {
     public ShowtimeClosedException(ShowtimeStatus status) {

@@ -1,4 +1,4 @@
-package com.ticketledger.domain.model.enums;
+package com.ticketledger.domain.enums;
 
 public enum PaymentProvider {
     STRIPE,

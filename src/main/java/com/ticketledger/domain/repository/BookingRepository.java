@@ -12,8 +12,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import com.ticketledger.domain.model.entity.Booking;
-import com.ticketledger.domain.model.enums.BookingStatus;
+import com.ticketledger.domain.entity.Booking;
+import com.ticketledger.domain.enums.BookingStatus;
 
 import jakarta.persistence.LockModeType;
 

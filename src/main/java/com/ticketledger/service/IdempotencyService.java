@@ -3,7 +3,7 @@ package com.ticketledger.service;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.ticketledger.domain.model.entity.IdempotencyKey;
+import com.ticketledger.domain.entity.IdempotencyKey;
 import com.ticketledger.exception.IdempotencyConflictException;
 
 import tools.jackson.databind.JsonNode;

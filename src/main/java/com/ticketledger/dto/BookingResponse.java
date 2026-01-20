@@ -6,12 +6,12 @@ import java.util.List;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.ticketledger.domain.model.entity.Booking;
-import com.ticketledger.domain.model.entity.BookingSeat;
-import com.ticketledger.domain.model.entity.Payment;
-import com.ticketledger.domain.model.enums.BookingStatus;
-import com.ticketledger.domain.model.enums.PaymentProvider;
-import com.ticketledger.domain.model.enums.PaymentStatus;
+import com.ticketledger.domain.entity.Booking;
+import com.ticketledger.domain.entity.BookingSeat;
+import com.ticketledger.domain.entity.Payment;
+import com.ticketledger.domain.enums.BookingStatus;
+import com.ticketledger.domain.enums.PaymentProvider;
+import com.ticketledger.domain.enums.PaymentStatus;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record BookingResponse(

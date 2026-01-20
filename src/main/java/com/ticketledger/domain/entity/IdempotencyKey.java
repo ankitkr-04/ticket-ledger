@@ -1,4 +1,4 @@
-package com.ticketledger.domain.model.entity;
+package com.ticketledger.domain.entity;
 
 import java.time.Instant;
 import java.util.UUID;
