@@ -613,17 +613,22 @@ return new AuthenticatedUser(
 
 ## 📋 Endpoints Implemented
 
-| Endpoint         | Method | Auth Required | Purpose                           |
-| ---------------- | ------ | ------------- | --------------------------------- |
-| `/auth/login`    | POST   | ❌ No          | Initial authentication            |
-| `/auth/refresh`  | POST   | ❌ No          | Rotate tokens                     |
-| `/auth/register` | POST   | ❌ No          | **🚧 Future:** Customer signup     |
-| `/auth/logout`   | POST   | ✅ Yes         | **🚧 Future:** Explicit revocation |
+| Endpoint         | Method | Auth Required | Purpose                        |
+| ---------------- | ------ | ------------- | ------------------------------ |
+| `/auth/login`    | POST   | ❌ No          | Initial authentication         |
+| `/auth/refresh`  | POST   | ❌ No          | Rotate tokens                  |
+| `/auth/register` | POST   | ❌ No          | Customer signup & auto-login   |
+| `/auth/logout`   | POST   | ✅ Yes         | Revoke all user refresh tokens |
 
-**Note on Registration:**
-- Customer registration (`/auth/register`) is NOT yet implemented
-- For MVP, assume admin users exist in database
-- Future: Will allow customers to self-register with email verification flow
+**Registration:**
+- Customers self-register with email and password
+- Email verification skipped for MVP (`isVerified: true` by default)
+- Auto-login: Returns access token + refresh token immediately
+
+**Logout:**
+- Requires valid JWT in Authorization header
+- Revokes all refresh tokens for the authenticated user
+- Access token remains valid until natural expiry (stateless limitation)
 
 ---
 
@@ -660,6 +665,6 @@ return new AuthenticatedUser(
 - [x] Multi-device support (multiple refresh tokens per user)
 - [x] DB performance impact analyzed (4% overhead)
 - [x] Revocation capability via `revoked` flag
-- [x] Email verification required for login
+- [x] Registration endpoint implemented (MVP: skip email verification)
+- [x] Logout endpoint implemented (revokes all user tokens)
 - [x] BCrypt password hashing (cost factor 12)
-- [x] Future: Registration endpoint planned

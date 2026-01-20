@@ -381,7 +381,100 @@ Content-Type: application/json
 
 ---
 
-### 3. Logout
+### 3. User Registration
+
+**Endpoint:** `POST /auth/register`
+
+**Purpose:** Create new user account and automatically issue authentication tokens
+
+**Headers:**
+```http
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "email": "newuser@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Request Schema:**
+
+| Field      | Type     | Required | Constraints        | Description                           |
+| ---------- | -------- | -------- | ------------------ | ------------------------------------- |
+| `email`    | `string` | ✅        | Valid email format | User's email (becomes login username) |
+| `password` | `string` | ✅        | Min 8 chars        | User's password (hashed with bcrypt)  |
+
+**Success Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "tokenType": "Bearer",
+    "expiresIn": 900,
+    "user": {
+      "userId": "user-uuid-123",
+      "email": "newuser@example.com",
+      "role": "CUSTOMER",
+      "isVerified": true
+    }
+  },
+  "meta": {
+    "timestamp": "2026-01-20T10:30:00Z",
+    "requestId": "req-register-001"
+  }
+}
+```
+
+**Response Schema:** Same as login (`AuthResponse`)
+
+**Error Responses:**
+
+| Status | Error Code             | Description                     |
+| ------ | ---------------------- | ------------------------------- |
+| `400`  | `INVALID_REQUEST`      | Missing/invalid fields          |
+| `400`  | `INVALID_EMAIL_FORMAT` | Email format validation failed  |
+| `400`  | `PASSWORD_TOO_SHORT`   | Password less than 8 characters |
+| `409`  | `EMAIL_ALREADY_EXISTS` | Email already registered        |
+
+**Example Error:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "EMAIL_ALREADY_EXISTS",
+    "message": "Email already in use",
+    "context": {},
+    "requestId": "req-register-002"
+  },
+  "meta": {
+    "timestamp": "2026-01-20T10:31:00Z"
+  }
+}
+```
+
+**Registration Flow:**
+1. Validate email format and password strength
+2. Check if email already exists (return `409 Conflict` if exists)
+3. Hash password using bcrypt (cost factor: 12)
+4. Create user with role `CUSTOMER` and `isVerified: true` (MVP - skip email verification)
+5. Generate access token + refresh token pair
+6. Return authentication tokens (auto-login)
+
+**Security Notes:**
+- Password is hashed using bcrypt with cost factor 12
+- Plaintext password is never stored
+- Email uniqueness enforced at database level (unique index on active users)
+- MVP: Email verification skipped (`isVerified: true` by default)
+- Future: Implement email verification flow before first booking
+
+---
+
+### 4. Logout
 
 **Endpoint:** `POST /auth/logout`
 

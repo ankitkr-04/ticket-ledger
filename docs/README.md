@@ -43,7 +43,7 @@ Deep dives into architectural choices and trade-offs:
   - Why stateless authentication?
   - JWT for access + Opaque token for refresh
   - Token rotation security analysis
-  - Performance vs security trade-offs
+  - User registration and logout implementation
   - **Key insight:** 4% DB overhead for revocation capability
 
 - **[decisions/02_idempotency_storage.md](decisions/02_idempotency_storage.md)** - Idempotency Strategy
@@ -53,12 +53,36 @@ Deep dives into architectural choices and trade-offs:
   - Transaction rollback safety
   - **Key insight:** Built-in locking eliminates distributed consensus
 
+- **[decisions/003_concurrency_model.md](decisions/003_concurrency_model.md)** - Virtual Threads
+  - Java 21+ Virtual Threads for I/O-bound workload
+  - Thread-per-request scalability (millions of threads)
+  - Connection pool as hard limit (HikariCP)
+  - Pinning risks and mitigation strategies
+  - **Key insight:** 85% time spent waiting on I/O
+
+- **[decisions/004_event_driven_notifications.md](decisions/004_event_driven_notifications.md)** - Async Events
+  - Spring `@TransactionalEventListener` pattern
+  - `AFTER_COMMIT` phase guarantees
+  - At-Most-Once delivery for MVP (acceptable trade-off)
+  - Async execution with Virtual Threads
+  - **Key insight:** Email failure doesn't rollback booking
+
+- **[decisions/005_observability_strategy.md](decisions/005_observability_strategy.md)** - Logging & Tracing
+  - MDC (Mapped Diagnostic Context) for correlation
+  - Automatic MDC propagation to Virtual Threads
+  - Structured logging (JSON in prod, console in dev)
+  - End-to-end request tracing across threads
+  - **Key insight:** Same `requestId` across async boundaries
+
 ---
 
 ## 🎯 Quick Reference
 
 ### Architecture Deep Dives
 - **Concurrency:** Read Flow H in [03_sequence_flows.md](architecture/03_sequence_flows.md#flow-h-concurrent-seat-reservation-the-race-condition)
+- **Virtual Threads:** See [decisions/003_concurrency_model.md](decisions/003_concurrency_model.md)
+- **Async Events:** See [decisions/004_event_driven_notifications.md](decisions/004_event_driven_notifications.md)
+- **Observability:** See [decisions/005_observability_strategy.md](decisions/005_observability_strategy.md)
 - **State Machines:** See [02_lifecycle_states.md](architecture/02_lifecycle_states.md)
 - **Database Design:** See "Architecture Note" in [04_database_schema.md](architecture/04_database_schema.md#seat_status)
 - **Authentication:** See [decisions/01_authentication_strategy.md](decisions/01_authentication_strategy.md)
@@ -81,6 +105,15 @@ Deep dives into architectural choices and trade-offs:
 ---
 
 ## 📝 Recent Updates
+
+### January 20, 2026
+1. ✅ Implemented user registration endpoint (POST /auth/register)
+2. ✅ Implemented logout endpoint (POST /auth/logout) with token revocation
+3. ✅ Created Virtual Threads concurrency model documentation
+4. ✅ Created Event-Driven Notifications architecture documentation
+5. ✅ Created Observability & Structured Logging strategy documentation
+6. ✅ Converted all diagrams to Mermaid format
+7. ✅ Refactored AuthService to interface + implementation pattern
 
 ### January 19, 2026
 1. ✅ Added comprehensive authentication strategy documentation
@@ -111,6 +144,9 @@ Deep dives into architectural choices and trade-offs:
 4. **Locks are Sorted** - Prevents deadlocks via consistent ordering
 5. **Errors are Machine-Readable** - Frontend-agnostic error codes
 6. **Authentication is Hybrid** - JWT (stateless) for speed + Opaque tokens (stateful) for security
+7. **Virtual Threads for I/O** - Scalable thread-per-request model for blocking operations
+8. **Events After Commit** - Side effects decouple from financial transactions
+9. **Observability First** - Correlation IDs across threads for end-to-end tracing
 
 ---
 

@@ -148,6 +148,15 @@ public class AuthServiceImpl implements AuthService {
         return refreshTokenRepository.save(token);
     }
 
+    @Override
+    @Transactional
+    public void logout(String email) {
+        var user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        revokeAllUserTokens(user);
+    }
+
     private void revokeAllUserTokens(User user) {
         var validTokens = refreshTokenRepository.findAllValidTokensByUser(user.getId());
         if (validTokens.isEmpty())
