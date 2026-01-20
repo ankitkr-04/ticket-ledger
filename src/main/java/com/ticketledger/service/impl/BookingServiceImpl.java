@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.resilience.annotation.Retryable;
@@ -16,6 +17,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketledger.config.BookingProperties;
+import com.ticketledger.domain.event.BookingConfirmedEvent;
+import com.ticketledger.domain.event.BookingRefundEvent;
 import com.ticketledger.domain.model.entity.*;
 import com.ticketledger.domain.model.enums.BookingStatus;
 import com.ticketledger.domain.model.enums.PaymentProvider;
@@ -50,29 +53,26 @@ public class BookingServiceImpl implements BookingService {
 
         private final IdempotencyService idempotencyService;
         private final JsonMapper jsonMapper;
+        private final ApplicationEventPublisher eventPublisher;
 
         @Override
         @Transactional(isolation = Isolation.REPEATABLE_READ)
         public void processPaymentWebhook(PaymentWebhookRequest request) {
-                // 1. Lock Payment (prevents duplicate webhook processing)
-                var paymentOpt = paymentRepository.findByIdWithLock(request.paymentId());
-                if (paymentOpt.isEmpty()) {
-                        throw new BusinessException(
-                                        "Payment not found",
-                                        "PAYMENT_NOT_FOUND",
-                                        HttpStatus.NOT_FOUND,
-                                        Map.of("paymentId", request.paymentId()));
-                }
 
-                Payment payment = paymentOpt.get();
+                // 1. Lock payment (idempotency + duplicate webhook protection)
+                Payment payment = paymentRepository.findByIdWithLock(request.paymentId())
+                                .orElseThrow(() -> new BusinessException(
+                                                "Payment not found",
+                                                "PAYMENT_NOT_FOUND",
+                                                HttpStatus.NOT_FOUND,
+                                                Map.of("paymentId", request.paymentId())));
 
-                // Idempotent: already processed successfully
+                // Already processed successfully → idempotent no-op
                 if (payment.getStatus() == PaymentStatus.SUCCESS) {
                         return;
                 }
 
-                // 2. Lock Booking (CRITICAL: prevents race with Reaper job)
-                // Without this lock, Reaper could expire the booking while we're processing
+                // 2. Lock booking (prevents race with reaper)
                 Booking booking = bookingRepository.findByIdWithLock(payment.getBooking().getId())
                                 .orElseThrow(() -> new BusinessException(
                                                 "Booking not found",
@@ -80,62 +80,27 @@ public class BookingServiceImpl implements BookingService {
                                                 HttpStatus.NOT_FOUND,
                                                 Map.of("bookingId", payment.getBooking().getId())));
 
-                // 3. Handle Payment Success
                 if (request.status() == PaymentStatus.SUCCESS) {
+
+                        // 3. Persist payment success
                         payment.setStatus(PaymentStatus.SUCCESS);
                         payment.setProviderTransactionId(request.providerTransactionId());
                         payment.setProviderCapturedAt(Instant.now());
                         paymentRepository.save(payment);
 
+                        // 4. Booking state handling
                         if (booking.getStatus() == BookingStatus.HELD) {
-                                // Normal flow: confirm the booking
-                                booking.setStatus(BookingStatus.CONFIRMED);
-                                bookingRepository.save(booking);
-
-                                // Mark seats as SOLD
-                                List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(booking.getId());
-                                for (BookingSeat bs : bookingSeats) {
-                                        Seat seat = bs.getSeat();
-                                        seat.setStatus(SeatStatus.SOLD);
-                                        seatRepository.save(seat);
-                                }
+                                // Normal success path
+                                confirmBooking(booking);
 
                         } else if (booking.getStatus() == BookingStatus.EXPIRED) {
-                                // Edge case: payment succeeded but booking already expired (Reaper ran)
-                                // Re-validate seat availability with locks
-                                List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(booking.getId());
-                                List<UUID> seatIds = bookingSeats.stream()
-                                                .map(bs -> bs.getSeat().getId())
-                                                .sorted() // Deadlock prevention
-                                                .toList();
-
-                                // Lock seats to check current state (prevents reading stale data)
-                                List<Seat> lockedSeats = seatRepository.lockSeats(seatIds);
-
-                                // Check if all seats are still available
-                                boolean allAvailable = lockedSeats.stream()
-                                                .allMatch(seat -> seat.getStatus() == SeatStatus.AVAILABLE);
-
-                                if (allAvailable) {
-                                        // All seats available: re-acquire and confirm booking
-                                        for (Seat seat : lockedSeats) {
-                                                seat.setStatus(SeatStatus.SOLD);
-                                                seatRepository.save(seat);
-                                        }
-                                        booking.setStatus(BookingStatus.CONFIRMED);
-                                        bookingRepository.save(booking);
-                                } else {
-                                        // Some seats unavailable (sold to someone else): mark for refund
-                                        booking.setStatus(BookingStatus.REFUND_REQUIRED);
-                                        bookingRepository.save(booking);
-                                }
+                                // Late success after expiry
+                                handleExpiredBookingLatePayment(booking, payment);
                         }
 
                 } else if (request.status() == PaymentStatus.FAILED) {
-                        // 4. Handle Payment Failure
-                        // Mark payment as failed, but do NOT cancel booking or release seats
-                        // Rationale: User can retry with another card while booking is still held
-                        // The Reaper job will expire the booking if user doesn't retry in time
+
+                        // 5. Payment failure (do NOT cancel booking here)
                         payment.setStatus(PaymentStatus.FAILED);
                         paymentRepository.save(payment);
                 }
@@ -259,6 +224,67 @@ public class BookingServiceImpl implements BookingService {
         }
 
         // --- HELPER METHODS ---
+
+        private void confirmBooking(Booking booking) {
+                booking.setStatus(BookingStatus.CONFIRMED);
+                bookingRepository.save(booking);
+
+                List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(booking.getId());
+                bookingSeats.forEach(bs -> {
+                        Seat seat = bs.getSeat();
+                        seat.setStatus(SeatStatus.SOLD);
+                        seatRepository.save(seat);
+                });
+
+                // 📧 EVENT 1: SUCCESS
+                eventPublisher.publishEvent(new BookingConfirmedEvent(
+                                booking.getId(),
+                                booking.getUser().getEmail(),
+                                bookingSeats.stream().map(BookingSeat::getPriceAtBooking).reduce(BigDecimal.ZERO,
+                                                BigDecimal::add),
+                                Instant.now()));
+        }
+
+        private void handleExpiredBookingLatePayment(Booking booking, Payment payment) {
+                // Re-validate seat availability
+                List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(booking.getId());
+                List<UUID> seatIds = bookingSeats.stream()
+                                .map(bs -> bs.getSeat().getId())
+                                .sorted()
+                                .toList();
+
+                List<Seat> lockedSeats = seatRepository.lockSeats(seatIds);
+                boolean allAvailable = lockedSeats.stream().allMatch(seat -> seat.getStatus() == SeatStatus.AVAILABLE);
+
+                if (allAvailable) {
+                        // Reclaim seats
+                        lockedSeats.forEach(seat -> {
+                                seat.setStatus(SeatStatus.SOLD);
+                                seatRepository.save(seat);
+                        });
+                        booking.setStatus(BookingStatus.CONFIRMED);
+                        bookingRepository.save(booking);
+
+                        // 📧 EVENT 1: LATE SUCCESS
+                        eventPublisher.publishEvent(new BookingConfirmedEvent(
+                                        booking.getId(),
+                                        booking.getUser().getEmail(),
+                                        payment.getAmount(),
+                                        Instant.now()));
+                } else {
+                        // Seats gone. Refund required.
+                        booking.setStatus(BookingStatus.REFUND_REQUIRED);
+                        bookingRepository.save(booking);
+
+                        // 📧 EVENT 2: REFUND REQUIRED
+                        eventPublisher.publishEvent(new BookingRefundEvent(
+                                        booking.getId(),
+                                        booking.getUser().getEmail(),
+                                        payment.getAmount(),
+                                        "Seats expired and were re-booked by another user.",
+                                        Instant.now()));
+                }
+        }
 
         private String generateRequestHash(CreateBookingRequest request, UUID userId) {
                 try {
