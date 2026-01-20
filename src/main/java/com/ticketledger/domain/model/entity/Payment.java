@@ -34,7 +34,7 @@ public class Payment extends BaseEntity {
     private BigDecimal amount;
 
     @Column(length = 3)
-    private String currency = "USD";
+    private String currency = "INR";
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

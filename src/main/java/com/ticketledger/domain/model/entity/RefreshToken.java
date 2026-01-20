@@ -5,15 +5,15 @@ import java.time.Instant;
 import com.ticketledger.domain.model.base.BaseEntity;
 
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "refresh_tokens")
 @Getter
 @Setter
 @NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class RefreshToken extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String token;

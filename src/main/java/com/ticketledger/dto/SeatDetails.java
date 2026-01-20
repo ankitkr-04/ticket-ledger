@@ -10,7 +10,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * Used in BookingResponse and AvailableSeatsResponse.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record SeatDTO(
+public record SeatDetails(
         UUID seatId,
         String row,
         String number,
@@ -24,7 +24,7 @@ public record SeatDTO(
         // booking receipt
         String status) {
     // specific constructor for Booking context where status might not be relevant
-    public SeatDTO(UUID seatId, String row, String number, String tier, BigDecimal price) {
+    public SeatDetails(UUID seatId, String row, String number, String tier, BigDecimal price) {
         this(seatId, row, number, tier, price, null);
     }
 }

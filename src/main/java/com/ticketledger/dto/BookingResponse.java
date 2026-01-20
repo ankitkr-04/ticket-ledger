@@ -20,7 +20,7 @@ public record BookingResponse(
                 Instant expiresAt,
                 Instant confirmedAt,
                 Instant cancelledAt,
-                List<SeatDTO> seats,
+                List<SeatDetails> seats,
                 AmountDetails amount,
                 PaymentDetails payment,
                 TicketDetails ticket) {
@@ -50,8 +50,8 @@ public record BookingResponse(
                                 payment.getProviderCapturedAt(),
                                 null);
 
-                List<SeatDTO> seatDTOs = bookingSeats.stream()
-                                .map(bs -> new SeatDTO(
+                List<SeatDetails> seatDTOs = bookingSeats.stream()
+                                .map(bs -> new SeatDetails(
                                                 bs.getSeat().getId(),
                                                 bs.getSeat().getSeatRow(),
                                                 bs.getSeat().getSeatNumber(),

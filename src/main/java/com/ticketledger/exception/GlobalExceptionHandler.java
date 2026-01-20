@@ -75,7 +75,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(PessimisticLockingFailureException.class)
     public ResponseEntity<Object> handleConcurrencyFailure(
-            Exception ex, HttpServletRequest request) {
+            PessimisticLockingFailureException ex, HttpServletRequest request) {
         return buildResponse(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "CONCURRENCY_FAILURE",

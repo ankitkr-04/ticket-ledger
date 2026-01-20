@@ -30,7 +30,7 @@ public class BookingCleanupScheduler {
                 PageRequest.of(0, 50));
 
         if (expiredBookings.isEmpty()) {
-            log.info("No expired bookings found for cleanup.");
+            log.debug("No expired bookings found for cleanup.");
             return;
         }
 

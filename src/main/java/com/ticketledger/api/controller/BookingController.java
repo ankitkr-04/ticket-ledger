@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import com.ticketledger.constant.HttpHeaderConstant;
 import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.dto.ApiResponse;
 import com.ticketledger.dto.BookingResponse;
@@ -27,7 +28,7 @@ public class BookingController {
     @PostMapping
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(
             @Valid @RequestBody CreateBookingRequest request,
-            @RequestHeader(name = "Idempotency-Key", required = true) UUID idempotencyKey,
+            @RequestHeader(name = HttpHeaderConstant.IDEMPOTENCY_KEY, required = true) UUID idempotencyKey,
             @AuthenticationPrincipal AuthenticatedUser currentUser) {
 
         BookingResponse booking = bookingService.createBooking(request, currentUser.getId(), idempotencyKey);

@@ -1,11 +1,12 @@
 package com.ticketledger.service.impl;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -33,6 +34,7 @@ import com.ticketledger.exception.SeatAlreadyBookedException;
 import com.ticketledger.exception.ShowtimeNotFoundException;
 import com.ticketledger.service.BookingService;
 import com.ticketledger.service.IdempotencyService;
+import com.ticketledger.util.CryptoUtil;
 
 import lombok.RequiredArgsConstructor;
 import tools.jackson.databind.JsonNode;
@@ -293,10 +295,7 @@ public class BookingServiceImpl implements BookingService {
                                         "userId", userId,
                                         "request", request);
                         String jsonString = jsonMapper.writeValueAsString(combined);
-                        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-                        byte[] hashBytes = digest.digest(jsonString.getBytes(StandardCharsets.UTF_8));
-
-                        return HexFormat.of().formatHex(hashBytes);
+                        return CryptoUtil.sha256(jsonString);
                 } catch (Exception e) {
                         throw new BusinessException(
                                         "Failed to generate request hash",

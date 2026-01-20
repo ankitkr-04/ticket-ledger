@@ -1,8 +1,6 @@
 package com.ticketledger.service.impl;
 
-import java.security.SecureRandom;
 import java.time.Instant;
-import java.util.Base64;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -25,6 +23,7 @@ import com.ticketledger.dto.RegisterRequest;
 import com.ticketledger.exception.BusinessException;
 import com.ticketledger.security.JwtService;
 import com.ticketledger.service.AuthService;
+import com.ticketledger.util.CryptoUtil;
 
 import lombok.RequiredArgsConstructor;
 
@@ -38,9 +37,6 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtProperties jwtProperties;
     private final PasswordEncoder passwordEncoder;
-
-    // Secure random for opaque tokens (better than UUID)
-    private final SecureRandom secureRandom = new SecureRandom();
 
     @Override
     @Transactional
@@ -135,9 +131,7 @@ public class AuthServiceImpl implements AuthService {
 
     private RefreshToken createRefreshToken(User user) {
         // Generate secure opaque string
-        byte[] randomBytes = new byte[32];
-        secureRandom.nextBytes(randomBytes);
-        String tokenString = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        String tokenString = CryptoUtil.generateOpaqueToken();
 
         var token = new RefreshToken();
         token.setUser(user);

@@ -11,6 +11,9 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.ticketledger.constant.HttpHeaderConstant;
+import com.ticketledger.constant.SecurityConstant;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,18 +35,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain) throws ServletException, IOException {
 
-        final String authHeader = request.getHeader("Authorization");
+        final String authHeader = request.getHeader(HttpHeaderConstant.AUTHORIZATION);
         final String jwt;
         final String userEmail;
 
         // 1. Early exit if no valid header is present
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        if (authHeader == null || !authHeader.startsWith(SecurityConstant.BEARER_PREFIX)) {
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
-            jwt = authHeader.substring(7);
+            jwt = authHeader.substring(SecurityConstant.BEARER_PREFIX_LENGTH);
 
             // 2. Extract username (this will throw ExpiredJwtException if access token is
             // expired)
