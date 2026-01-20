@@ -1,12 +1,19 @@
 package com.ticketledger.domain.base;
 
-import com.fasterxml.uuid.Generators;
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.*;
+import java.time.Instant;
+import java.util.UUID;
 
-import java.time.*;
-import java.util.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import com.fasterxml.uuid.Generators;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Id;
+import jakarta.persistence.MappedSuperclass;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Base entity providing UUIDv7 primary key and audit timestamps.
