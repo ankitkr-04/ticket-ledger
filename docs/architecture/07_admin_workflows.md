@@ -208,6 +208,15 @@ sequenceDiagram
 - Must provide audit reason (min 10 chars)
 - Requires `Idempotency-Key` header
 
+**Pre-Flight Authorization:**
+```
+0. Theater Scope Validation (No Locks Acquired)
+   - Resolve booking → showtime → screen → theater
+   - Query admin_theater_access: admin has access to theater?
+   - If NO: Return 403 FORBIDDEN immediately (no DB locks acquired)
+   - If YES: Proceed to transaction
+```
+
 **Transaction Boundary:**
 ```
 BEGIN TRANSACTION (Isolation: SERIALIZABLE)
@@ -238,6 +247,7 @@ COMMIT
 
 | Failure Point      | Action                                                |
 | ------------------ | ----------------------------------------------------- |
+| Theater access     | Return `403 THEATER_ACCESS_DENIED` (immediate)        |
 | Lock acquisition   | Return `423 LOCKED` (retry after 30s)                 |
 | State validation   | Return `409 INVALID_STATE_TRANSITION`                 |
 | Stripe API failure | Rollback transaction, no compensation needed          |
@@ -250,6 +260,15 @@ COMMIT
 **Trigger:** Admin pauses a showtime (emergency shutdown).
 
 **Behavior:** Atomically expire all `HELD` bookings and release seats.
+
+**Pre-Flight Authorization:**
+```
+0. Theater Scope Validation (No Locks Acquired)
+   - Resolve showtime → screen → theater
+   - Query admin_theater_access: admin has access to theater?
+   - If NO: Return 403 FORBIDDEN immediately (no DB locks acquired)
+   - If YES: Proceed to transaction
+```
 
 **Transaction Flow:**
 

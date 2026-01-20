@@ -38,4 +38,10 @@ public class User extends SoftDeletableEntity {
 
     @Column(name = "is_verified")
     private boolean isVerified = false;
+
+    @Column(name = "full_name", length = 255)
+    private String fullName;
+
+    @Column(name = "profile_image_url", columnDefinition = "TEXT")
+    private String profileImageUrl;
 }

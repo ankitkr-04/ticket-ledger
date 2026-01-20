@@ -72,17 +72,20 @@ UUID id = Generators.timeBasedEpochGenerator().generate();
 
 ### Tables with Soft Delete
 
-| Table           | `deleted_at` Column | Reason                                             |
-| --------------- | ------------------- | -------------------------------------------------- |
-| `users`         | ✅                   | Allow email reuse, preserve booking history        |
-| `movies`        | ✅                   | Hide from catalog, preserve showtime history       |
-| `screens`       | ✅                   | Decommission venue, preserve showtime history      |
-| `showtimes`     | ✅                   | Cancel future shows, preserve booking history      |
-| `seat_tiers`    | ✅                   | Deprecate pricing tier, preserve historical prices |
-| `bookings`      | ❌                   | Use `status = 'CANCELLED'`                         |
-| `payments`      | ❌                   | Use `status = 'REFUNDED'`                          |
-| `seats`         | ❌                   | Tied to showtime lifecycle                         |
-| `booking_seats` | ❌                   | Junction table, no direct deletes                  |
+| Table                  | `deleted_at` Column | Reason                                             |
+| ---------------------- | ------------------- | -------------------------------------------------- |
+| `users`                | ✅                   | Allow email reuse, preserve booking history        |
+| `theaters`             | ✅                   | Decommission theater, preserve screen history      |
+| `movies`               | ✅                   | Hide from catalog, preserve showtime history       |
+| `screens`              | ✅                   | Decommission venue, preserve showtime history      |
+| `showtimes`            | ✅                   | Cancel future shows, preserve booking history      |
+| `seat_tiers`           | ✅                   | Deprecate pricing tier, preserve historical prices |
+| `bookings`             | ❌                   | Use `status = 'CANCELLED'`                         |
+| `payments`             | ❌                   | Use `status = 'REFUNDED'`                          |
+| `seats`                | ❌                   | Tied to showtime lifecycle                         |
+| `booking_seats`        | ❌                   | Junction table, no direct deletes                  |
+| `admin_theater_access` | ❌                   | Use `revoked_at` for soft revocation               |
+| `admin_audit_log`      | ❌                   | Immutable audit trail, never deleted               |
 
 ### Unique Index Handling
 
@@ -123,28 +126,37 @@ erDiagram
     USERS ||--o{ BOOKINGS : creates
     USERS ||--o{ REFRESH_TOKENS : "has"
     USERS ||--o{ IDEMPOTENCY_KEYS : "owns"
+    USERS ||--o{ ADMIN_THEATER_ACCESS : "has access to"
+    THEATERS ||--o{ ADMIN_THEATER_ACCESS : "accessed by"
+    THEATERS ||--o{ SCREENS : "contains"
+    THEATERS ||--o{ ADMIN_AUDIT_LOG : "target of"
     MOVIES ||--o{ SHOWTIMES : "scheduled for"
     SCREENS ||--o{ SHOWTIMES : "shown on"
     SHOWTIMES ||--o{ SEATS : contains
     SHOWTIMES ||--o{ BOOKINGS : "booked for"
+    SHOWTIMES ||--o{ ADMIN_AUDIT_LOG : "target of"
     SEAT_TIERS ||--o{ SEATS : "priced by"
     BOOKINGS ||--o{ BOOKING_SEATS : "links"
+    BOOKINGS ||--o{ ADMIN_AUDIT_LOG : "target of"
     SEATS ||--o{ BOOKING_SEATS : "links"
     BOOKINGS ||--|| PAYMENTS : "paid via"
+    USERS ||--o{ ADMIN_AUDIT_LOG : performs
 ```
 
 ### Table Categories
 
-| Category           | Tables                      | Soft Delete  |
-| ------------------ | --------------------------- | ------------ |
-| **Identity**       | `users`                     | ✅ Yes        |
-| **Authentication** | `refresh_tokens`            | ❌ No         |
-| **Idempotency**    | `idempotency_keys`          | ❌ No         |
-| **Content**        | `movies`, `screens`         | ✅ Yes        |
-| **Scheduling**     | `showtimes`                 | ✅ Yes        |
-| **Inventory**      | `seat_tiers`, `seats`       | ✅ Tiers only |
-| **Transaction**    | `bookings`, `booking_seats` | ❌ No         |
-| **Financial**      | `payments`                  | ❌ No         |
+| Category           | Tables                             | Soft Delete      |
+| ------------------ | ---------------------------------- | ---------------- |
+| **Identity**       | `users`                            | ✅ Yes            |
+| **Authentication** | `refresh_tokens`                   | ❌ No             |
+| **Idempotency**    | `idempotency_keys`                 | ❌ No             |
+| **Theater Mgmt**   | `theaters`, `admin_theater_access` | ✅ Theaters only  |
+| **Content**        | `movies`, `screens`                | ✅ Yes            |
+| **Scheduling**     | `showtimes`                        | ✅ Yes            |
+| **Inventory**      | `seat_tiers`, `seats`              | ✅ Tiers only     |
+| **Transaction**    | `bookings`, `booking_seats`        | ❌ No             |
+| **Financial**      | `payments`                         | ❌ No             |
+| **Audit**          | `admin_audit_log`                  | ❌ No (immutable) |
 
 ---
 
@@ -196,17 +208,21 @@ CREATE TYPE booking_status AS ENUM (
     'EXPIRED', 
     'CANCELLED', 
     'COMPLETED', 
-    'REFUND_REQUIRED'
+    'REFUND_REQUIRED',
+    'REFUND_INITIATED',
+    'REFUNDED'
 );
 ```
-| Value             | Description                 | Transition        |
-| ----------------- | --------------------------- | ----------------- |
-| `HELD`            | Awaiting payment            | Initial state     |
-| `CONFIRMED`       | Payment successful          | Success path      |
-| `EXPIRED`         | Hold timeout exceeded       | Failure path      |
-| `CANCELLED`       | User-initiated cancellation | Post-confirmation |
-| `COMPLETED`       | Showtime passed             | Lifecycle end     |
-| `REFUND_REQUIRED` | Integrity violation         | Compensation path |
+| Value              | Description                          | Transition        |
+| ------------------ | ------------------------------------ | ----------------- |
+| `HELD`             | Awaiting payment                     | Initial state     |
+| `CONFIRMED`        | Payment successful                   | Success path      |
+| `EXPIRED`          | Hold timeout exceeded                | Failure path      |
+| `CANCELLED`        | User-initiated cancellation          | Post-confirmation |
+| `COMPLETED`        | Showtime passed                      | Lifecycle end     |
+| `REFUND_REQUIRED`  | Integrity violation detected         | Compensation path |
+| `REFUND_INITIATED` | Admin refund in-flight (pessimistic) | Transient lock    |
+| `REFUNDED`         | Refund processed successfully        | Terminal state    |
 
 ### `payment_status`
 ```sql
@@ -223,11 +239,11 @@ CREATE TYPE payment_status AS ENUM ('PENDING', 'SUCCESS', 'FAILED', 'REFUNDED');
 ```sql
 CREATE TYPE showtime_status AS ENUM ('ACTIVE', 'PAUSED', 'INACTIVE');
 ```
-| Value      | Description           | Booking Allowed |
-| ---------- | --------------------- | --------------- |
-| `ACTIVE`   | Open for bookings     | ✅ Yes           |
-| `PAUSED`   | Temporarily suspended | ❌ No            |
-| `INACTIVE` | Permanently closed    | ❌ No            |
+| Value      | Description                    | Booking Allowed |
+| ---------- | ------------------------------ | --------------- |
+| `ACTIVE`   | Open for bookings              | ✅ Yes           |
+| `PAUSED`   | Temporarily suspended by admin | ❌ No            |
+| `INACTIVE` | Permanently closed             | ❌ No            |
 
 ---
 
@@ -237,16 +253,18 @@ CREATE TYPE showtime_status AS ENUM ('ACTIVE', 'PAUSED', 'INACTIVE');
 
 **Purpose:** Store user accounts and authentication credentials
 
-| Column          | Type           | Constraints                    | Description                   |
-| --------------- | -------------- | ------------------------------ | ----------------------------- |
-| `id`            | `UUID`         | `PRIMARY KEY DEFAULT uuidv7()` | UUIDv7 user identifier        |
-| `email`         | `VARCHAR(255)` | `NOT NULL`                     | Login email (case-sensitive)  |
-| `password_hash` | `VARCHAR(255)` | `NOT NULL`                     | Bcrypt/Argon2 hashed password |
-| `role`          | `user_role`    | `DEFAULT 'CUSTOMER'`           | User permission level         |
-| `is_verified`   | `BOOLEAN`      | `DEFAULT FALSE`                | Email verification status     |
-| `deleted_at`    | `TIMESTAMPTZ`  | `NULL`                         | Soft delete timestamp         |
-| `created_at`    | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Account creation time         |
-| `updated_at`    | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Last profile update           |
+| Column              | Type           | Constraints                    | Description                   |
+| ------------------- | -------------- | ------------------------------ | ----------------------------- |
+| `id`                | `UUID`         | `PRIMARY KEY DEFAULT uuidv7()` | UUIDv7 user identifier        |
+| `email`             | `VARCHAR(255)` | `NOT NULL`                     | Login email (case-sensitive)  |
+| `password_hash`     | `VARCHAR(255)` | `NOT NULL`                     | Bcrypt/Argon2 hashed password |
+| `role`              | `user_role`    | `DEFAULT 'CUSTOMER'`           | User permission level         |
+| `is_verified`       | `BOOLEAN`      | `DEFAULT FALSE`                | Email verification status     |
+| `full_name`         | `VARCHAR(255)` | `NULL`                         | User's display name           |
+| `profile_image_url` | `TEXT`         | `NULL`                         | Profile picture URL           |
+| `deleted_at`        | `TIMESTAMPTZ`  | `NULL`                         | Soft delete timestamp         |
+| `created_at`        | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Account creation time         |
+| `updated_at`        | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Last profile update           |
 
 **Indexes:**
 ```sql
@@ -403,21 +421,131 @@ VALUES ('client-provided-uuid', 'user-uuid', NOW() + INTERVAL '24 hours');
 
 ---
 
-### 4. `screens` — Physical Theater Rooms
+### 3. `theaters` — Physical Buildings
 
-**Purpose:** Represent physical screening locations to prevent scheduling conflicts
+**Purpose:** Represent theater/multiplex buildings as admin scope boundaries
 
-| Column        | Type          | Constraints                    | Description                     |
-| ------------- | ------------- | ------------------------------ | ------------------------------- |
-| `id`          | `UUID`        | `PRIMARY KEY DEFAULT uuidv7()` | UUIDv7 screen identifier        |
-| `name`        | `VARCHAR(50)` | `NOT NULL`                     | Display name (e.g., "Screen 1") |
-| `total_seats` | `INT`         | `DEFAULT 0`                    | Total capacity (informational)  |
-| `deleted_at`  | `TIMESTAMPTZ` | `NULL`                         | Soft delete timestamp           |
-| `created_at`  | `TIMESTAMPTZ` | `DEFAULT NOW()`                | Screen added time               |  | `updated_at` | `TIMESTAMPTZ` | `DEFAULT NOW()` | Last modification time |
+| Column       | Type           | Constraints                    | Description                        |
+| ------------ | -------------- | ------------------------------ | ---------------------------------- |
+| `id`         | `UUID`         | `PRIMARY KEY DEFAULT uuidv7()` | UUIDv7 theater identifier          |
+| `name`       | `VARCHAR(255)` | `NOT NULL`                     | Theater name (e.g., "PVR Phoenix") |
+| `city`       | `VARCHAR(100)` | `NOT NULL`                     | City location                      |
+| `address`    | `TEXT`         | `NULL`                         | Full street address                |
+| `deleted_at` | `TIMESTAMPTZ`  | `NULL`                         | Soft delete timestamp              |
+| `created_at` | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Theater created time               |
+| `updated_at` | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Last modification time             |
+
 **Indexes:**
 ```sql
--- Screen name uniqueness (only for active screens)
-CREATE UNIQUE INDEX idx_screens_name_active ON screens(name) 
+-- Theater name and city lookup
+CREATE INDEX idx_theaters_name_city ON theaters(name, city) 
+WHERE deleted_at IS NULL;
+
+-- City-based filtering
+CREATE INDEX idx_theaters_city ON theaters(city)
+WHERE deleted_at IS NULL;
+
+-- Soft delete queries
+CREATE INDEX idx_theaters_deleted ON theaters(deleted_at);
+```
+
+**Business Rules:**
+- Soft delete decommissions theater but preserves screen and showtime history
+- Theater acts as scope root for admin authorization (see `admin_theater_access`)
+- Admin creating a theater is automatically granted access to it
+- Cannot hard-delete theater with existing screens (foreign key protection)
+
+---
+
+### 4. `admin_theater_access` — Admin Authorization
+
+**Purpose:** Many-to-many junction table for theater-scoped admin access control
+
+| Column       | Type          | Constraints                                           | Description                    |
+| ------------ | ------------- | ----------------------------------------------------- | ------------------------------ |
+| `user_id`    | `UUID`        | `REFERENCES users(id) ON DELETE CASCADE, NOT NULL`    | Which admin user               |
+| `theater_id` | `UUID`        | `REFERENCES theaters(id) ON DELETE CASCADE, NOT NULL` | Which theater they can manage  |
+| `granted_at` | `TIMESTAMPTZ` | `DEFAULT NOW()`                                       | When access was granted        |
+| `revoked_at` | `TIMESTAMPTZ` | `NULL`                                                | When access was revoked (soft) |
+
+**Constraints:**
+```sql
+-- Composite primary key
+PRIMARY KEY (user_id, theater_id)
+```
+
+**Indexes:**
+```sql
+-- Find all theaters an admin can access
+CREATE INDEX idx_admin_access_user ON admin_theater_access(user_id)
+WHERE revoked_at IS NULL;
+
+-- Find all admins with access to a theater
+CREATE INDEX idx_admin_access_theater ON admin_theater_access(theater_id)
+WHERE revoked_at IS NULL;
+
+-- Revocation audit
+CREATE INDEX idx_admin_access_revoked ON admin_theater_access(revoked_at);
+```
+
+**Business Rules:**
+- ❌ **NO soft delete** — Use `revoked_at` for access revocation (preserves audit trail)
+- New admins register with role='ADMIN' but have **zero theater access initially**
+- Access is automatically granted when admin creates a new theater
+- Revocation sets `revoked_at` timestamp but keeps record in database
+- Queries must filter `WHERE revoked_at IS NULL` for active access
+- `ON DELETE CASCADE` ensures cleanup when user or theater is deleted
+
+**Authorization Pattern:**
+```sql
+-- Check if admin has access to theater
+SELECT 1 FROM admin_theater_access
+WHERE user_id = :adminId 
+  AND theater_id = :theaterId
+  AND revoked_at IS NULL;
+
+-- Grant access (idempotent via UPSERT)
+INSERT INTO admin_theater_access (user_id, theater_id)
+VALUES (:adminId, :theaterId)
+ON CONFLICT (user_id, theater_id) DO UPDATE
+SET revoked_at = NULL;  -- Re-grant if previously revoked
+
+-- Revoke access
+UPDATE admin_theater_access
+SET revoked_at = NOW()
+WHERE user_id = :adminId AND theater_id = :theaterId;
+```
+
+---
+
+### 5. `screens` — Physical Theater Rooms
+
+**Purpose:** Represent physical screening rooms within a theater building
+
+| Column        | Type          | Constraints                                            | Description                     |
+| ------------- | ------------- | ------------------------------------------------------ | ------------------------------- |
+| `id`          | `UUID`        | `PRIMARY KEY DEFAULT uuidv7()`                         | UUIDv7 screen identifier        |
+| `theater_id`  | `UUID`        | `REFERENCES theaters(id) ON DELETE RESTRICT, NOT NULL` | Which theater contains screen   |
+| `name`        | `VARCHAR(50)` | `NOT NULL`                                             | Display name (e.g., "Screen 1") |
+| `total_seats` | `INT`         | `DEFAULT 0`                                            | Total capacity (informational)  |
+| `deleted_at`  | `TIMESTAMPTZ` | `NULL`                                                 | Soft delete timestamp           |
+| `created_at`  | `TIMESTAMPTZ` | `DEFAULT NOW()`                                        | Screen added time               |
+| `updated_at`  | `TIMESTAMPTZ` | `DEFAULT NOW()`                                        | Last modification time          |
+
+**Constraints:**
+```sql
+-- Screen names unique within theater
+UNIQUE(theater_id, name) WHERE deleted_at IS NULL
+```
+
+**Indexes:**
+```sql
+-- Find screens for a theater
+CREATE INDEX idx_screens_theater ON screens(theater_id)
+WHERE deleted_at IS NULL;
+
+-- Screen name uniqueness within theater
+CREATE UNIQUE INDEX idx_screens_name_theater_active ON screens(theater_id, name) 
 WHERE deleted_at IS NULL;
 
 -- Soft delete queries
@@ -428,20 +556,27 @@ CREATE INDEX idx_screens_deleted ON screens(deleted_at);
 - Soft delete preserves historical showtime integrity
 - Admin cannot hard-delete screen with existing showtimes
 - All queries filter `WHERE deleted_at IS NULL` for active screens
+- Screen names must be unique **within a theater** (not globally)
+- `ON DELETE RESTRICT` prevents deleting theater with active screens
 
 ---
 
 ### 3. `movies` — Content Metadata
 
-**Purpose:** Store basic movie information for scheduling
+**Purpose:** Store movie information for scheduling and catalog display
 
-| Column             | Type           | Constraints                    | Description             |
-| ------------------ | -------------- | ------------------------------ | ----------------------- |
-| `id`               | `UUID`         | `PRIMARY KEY DEFAULT uuidv7()` | UUIDv7 movie identifier |
-| `title`            | `VARCHAR(255)` | `NOT NULL`                     | Movie title             |
-| `duration_minutes` | `INT`          | `NOT NULL`                     | Runtime in minutes      |
-| `deleted_at`       | `TIMESTAMPTZ`  | `NULL`                         | Soft delete timestamp   |
-| `created_at`       | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Movie added time        |  | `updated_at` | `TIMESTAMPTZ` | `DEFAULT NOW()` | Last modification time |
+| Column             | Type           | Constraints                    | Description                  |
+| ------------------ | -------------- | ------------------------------ | ---------------------------- |
+| `id`               | `UUID`         | `PRIMARY KEY DEFAULT uuidv7()` | UUIDv7 movie identifier      |
+| `title`            | `VARCHAR(255)` | `NOT NULL`                     | Movie title                  |
+| `duration_minutes` | `INT`          | `NOT NULL`                     | Runtime in minutes           |
+| `description`      | `TEXT`         | `NULL`                         | Movie synopsis/plot          |
+| `thumbnail_url`    | `TEXT`         | `NULL`                         | Poster/thumbnail image URL   |
+| `genre`            | `VARCHAR(100)` | `NULL`                         | Movie genre (e.g., "Action") |
+| `language`         | `VARCHAR(50)`  | `NULL`                         | Primary language             |
+| `deleted_at`       | `TIMESTAMPTZ`  | `NULL`                         | Soft delete timestamp        |
+| `created_at`       | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Movie added time             |
+| `updated_at`       | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Last modification time       |
 **Indexes:**
 ```sql
 -- Active movies for catalog
@@ -455,7 +590,8 @@ CREATE INDEX idx_movies_deleted ON movies(deleted_at);
 **Business Rules:**
 - Soft delete hides from catalog but preserves showtime history
 - `duration_minutes` used to calculate `showtimes.end_time`
-- Minimal fields for MVP; extend with genres, ratings, posters later
+- Display metadata (`description`, `thumbnail_url`, `genre`, `language`) enhances catalog UX
+- All display fields are nullable for gradual data enrichment
 
 ---
 
@@ -706,6 +842,98 @@ LIMIT 1;
 
 ---
 
+### 10. `admin_audit_log` — Privileged Operation Audit Trail
+
+**Purpose:** Immutable ledger of all administrative actions requiring accountability
+
+| Column            | Type          | Constraints                               | Description                                     |
+| ----------------- | ------------- | ----------------------------------------- | ----------------------------------------------- |
+| `id`              | `UUID`        | `PRIMARY KEY DEFAULT uuidv7()`            | UUIDv7 audit entry identifier                   |
+| `admin_user_id`   | `UUID`        | `REFERENCES users(id) ON DELETE RESTRICT` | Which admin performed the action                |
+| `booking_id`      | `UUID`        | `REFERENCES bookings(id), NULL`           | Target booking (for refunds)                    |
+| `showtime_id`     | `UUID`        | `REFERENCES showtimes(id), NULL`          | Target showtime (for pauses)                    |
+| `theater_id`      | `UUID`        | `REFERENCES theaters(id), NULL`           | Target theater (for theater ops)                |
+| `action`          | `VARCHAR(50)` | `NOT NULL`                                | Action type (e.g., "REFUND", "PAUSE")           |
+| `status`          | `VARCHAR(20)` | `NOT NULL`                                | Execution status (INITIATED, COMPLETED, FAILED) |
+| `reason`          | `TEXT`        | `NOT NULL`                                | Mandatory justification for action              |
+| `idempotency_key` | `VARCHAR(64)` | `UNIQUE, NULL`                            | Prevents duplicate execution                    |
+| `created_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()`                           | Action initiated time                           |
+| `updated_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()`                           | Status last updated                             |
+
+**Constraints:**
+```sql
+-- At least one target must be specified
+CHECK (booking_id IS NOT NULL OR showtime_id IS NOT NULL OR theater_id IS NOT NULL)
+```
+
+**Indexes:**
+```sql
+-- Find all actions by admin
+CREATE INDEX idx_audit_admin ON admin_audit_log(admin_user_id, created_at DESC);
+
+-- Find audit trail for booking
+CREATE INDEX idx_audit_booking ON admin_audit_log(booking_id)
+WHERE booking_id IS NOT NULL;
+
+-- Find audit trail for showtime
+CREATE INDEX idx_audit_showtime ON admin_audit_log(showtime_id)
+WHERE showtime_id IS NOT NULL;
+
+-- Find audit trail for theater
+CREATE INDEX idx_audit_theater ON admin_audit_log(theater_id)
+WHERE theater_id IS NOT NULL;
+
+-- Idempotency lookup
+CREATE UNIQUE INDEX idx_audit_idempotency ON admin_audit_log(idempotency_key)
+WHERE idempotency_key IS NOT NULL;
+
+-- Find failed operations
+CREATE INDEX idx_audit_failed ON admin_audit_log(status, created_at DESC)
+WHERE status = 'FAILED';
+```
+
+**Business Rules:**
+- ❌ **NO soft delete** — Audit records are immutable and permanent
+- Every privileged operation must have a `reason` (enforced by NOT NULL)
+- `idempotency_key` prevents duplicate refunds/pauses from UI retries
+- Flexible target system: one of `booking_id`, `showtime_id`, or `theater_id` must be set
+- `ON DELETE RESTRICT` on admin_user_id prevents deleting admins with audit history
+- Status progression: `INITIATED` → `COMPLETED` or `FAILED` (never rolls back to INITIATED)
+- Created immutably on action start; status updated atomically with business logic
+
+**Audit Query Patterns:**
+```sql
+-- Find all refunds by admin
+SELECT * FROM admin_audit_log
+WHERE admin_user_id = :adminId 
+  AND action = 'REFUND'
+ORDER BY created_at DESC;
+
+-- Find incomplete operations (stuck in INITIATED)
+SELECT * FROM admin_audit_log
+WHERE status = 'INITIATED' 
+  AND created_at < NOW() - INTERVAL '1 hour';
+
+-- Check if refund already processed (idempotency)
+SELECT id FROM admin_audit_log
+WHERE idempotency_key = :key;
+
+-- Audit trail for specific booking
+SELECT a.*, u.email as admin_email
+FROM admin_audit_log a
+JOIN users u ON a.admin_user_id = u.id
+WHERE a.booking_id = :bookingId
+ORDER BY a.created_at;
+```
+
+**Why Multiple Target Columns:**
+- **Flexibility:** Supports diverse admin actions (refunds target bookings, pauses target showtimes, theater ops target theaters)
+- **Referential Integrity:** Explicit FKs ensure targets exist at audit time
+- **Query Performance:** Indexed FKs enable efficient "show me all actions on X" queries
+- **Type Safety:** Database enforces at least one target via CHECK constraint
+
+---
+
 ## 🔐 Critical Constraints Summary
 
 ### Uniqueness Constraints (Soft Delete Aware)
@@ -795,9 +1023,11 @@ CREATE INDEX idx_bookings_reaper ON bookings(status, locked_until);
 - Application layer generates UUIDs for consistency across DB versions
 
 ### 2. **Soft Delete Only for Master Data**
-- ✅ Users, Movies, Screens, Showtimes, seat_tiers
-- ❌ Bookings, Payments, Seats, booking_seats
+- ✅ Users, Theaters, Movies, Screens, Showtimes, seat_tiers
+- ❌ Bookings, Payments, Seats, booking_seats, admin_theater_access, admin_audit_log
 - Financial records use status transitions, not deletion
+- Audit records are immutable and never deleted
+- Audit records are immutable and never deleted
 
 ### 3. **Unique Indexes Respect Soft Deletes**
 - `WHERE deleted_at IS NULL` prevents duplicate conflicts
@@ -883,14 +1113,14 @@ User findByEmailIncludingDeleted(@Param("email") String email);
 
 ## 📊 Schema Statistics (Estimated)
 
-| Metric                 | Value | Note                                         |
-| ---------------------- | ----- | -------------------------------------------- |
-| **Tables**             | 11    | Core entities + authentication + idempotency |
-| **Indexes**            | 26+   | Performance-critical + soft delete           |
-| **ENUMs**              | 5     | Strict type safety                           |
-| **Foreign Keys**       | 11    | Referential integrity                        |
-| **Constraints**        | 10    | Uniqueness + exclusion + soft delete         |
-| **Soft Delete Tables** | 5     | Master data only                             |
+| Metric                 | Value | Note                                                   |
+| ---------------------- | ----- | ------------------------------------------------------ |
+| **Tables**             | 14    | Core + auth + idempotency + theaters + audit           |
+| **Indexes**            | 35+   | Performance-critical + soft delete + theater scoping   |
+| **ENUMs**              | 5     | Strict type safety                                     |
+| **Foreign Keys**       | 15    | Referential integrity + theater scoping                |
+| **Constraints**        | 13    | Uniqueness + exclusion + soft delete + theater scoping |
+| **Soft Delete Tables** | 6     | Master data + theaters                                 |
 
 ---
 

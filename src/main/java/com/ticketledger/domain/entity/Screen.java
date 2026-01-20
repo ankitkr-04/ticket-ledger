@@ -1,10 +1,14 @@
 package com.ticketledger.domain.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.*;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 import com.ticketledger.domain.base.SoftDeletableEntity;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Represents a physical screening room in the theater.
@@ -23,4 +27,8 @@ public class Screen extends SoftDeletableEntity {
 
     @Column(name = "total_seats")
     private int totalSeats = 0;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "theater_id", nullable = false)
+    private Theater theater;
 }

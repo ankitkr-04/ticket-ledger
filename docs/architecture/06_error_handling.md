@@ -217,12 +217,14 @@ Business rule violations or invalid requests.
 
 ### 🟡 Authentication & Authorization (4xx)
 
-| Code                | HTTP Status | Message                                             | Context Fields | When Triggered           |
-| ------------------- | ----------- | --------------------------------------------------- | -------------- | ------------------------ |
-| `UNAUTHORIZED`      | 401         | Authentication required.                            | -              | Missing/invalid JWT      |
-| `TOKEN_EXPIRED`     | 401         | Authentication token has expired.                   | `expiredAt`    | JWT expired              |
-| `FORBIDDEN`         | 403         | You do not have permission to access this resource. | `requiredRole` | Insufficient permissions |
-| `USER_NOT_VERIFIED` | 403         | Email verification required.                        | `email`        | Unverified email         |
+| Code                    | HTTP Status | Message                                             | Context Fields | When Triggered             |
+| ----------------------- | ----------- | --------------------------------------------------- | -------------- | -------------------------- |
+| `UNAUTHORIZED`          | 401         | Authentication required.                            | -              | Missing/invalid JWT        |
+| `TOKEN_EXPIRED`         | 401         | Authentication token has expired.                   | `expiredAt`    | JWT expired                |
+| `FORBIDDEN`             | 403         | You do not have permission to access this resource. | `requiredRole` | Insufficient permissions   |
+| `USER_NOT_VERIFIED`     | 403         | Email verification required.                        | `email`        | Unverified email           |
+| `THEATER_ACCESS_DENIED` | 403         | You do not have permission to manage this theater.  | `theaterId`    | Admin lacks theater access |
+| `THEATER_NOT_FOUND`     | 404         | Theater does not exist.                             | `theaterId`    | Invalid theater ID         |
 
 **Example:**
 ```json

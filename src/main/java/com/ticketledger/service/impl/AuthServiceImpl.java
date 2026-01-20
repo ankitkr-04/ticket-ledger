@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ticketledger.config.JwtProperties;
 import com.ticketledger.domain.entity.RefreshToken;
 import com.ticketledger.domain.entity.User;
-import com.ticketledger.domain.enums.UserRole;
 import com.ticketledger.domain.repository.RefreshTokenRepository;
 import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.dto.AuthResponse;
@@ -78,11 +77,16 @@ public class AuthServiceImpl implements AuthService {
         var user = new User();
         user.setEmail(request.email());
         user.setPasswordHash(hashedPassword);
-        user.setRole(UserRole.CUSTOMER);
+        user.setRole(request.getRole()); // Use role from request (defaults to CUSTOMER)
         user.setVerified(true); // For MVP - skip email verification
+        user.setFullName(request.fullName()); // Optional profile field
+        user.setProfileImageUrl(request.profileImageUrl()); // Optional profile field
 
         // 4. Save user
         user = userRepository.save(user);
+
+        // Note: If user registered as ADMIN, they start with 0 theater access
+        // They must create a theater or be granted access by another admin
 
         // 5. Auto-login: Generate tokens
         var accessToken = jwtService.generateToken(user.getEmail());
