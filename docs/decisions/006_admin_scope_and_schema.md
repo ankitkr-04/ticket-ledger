@@ -401,9 +401,3 @@ GET    /admin/bookings             → Filtered by accessible theaters
 | Orphaned audit logs if booking deleted | Use explicit FKs with ON DELETE RESTRICT                       |
 | Performance of theater access checks   | Add indexes on admin_theater_access(user_id)                   |
 | Audit log table growth                 | Future: Implement archival strategy (retain 2 years)           |
-
----
-
-**Status:** Approved for Implementation  
-**Author:** System Architect  
-**Date:** 2026-01-20

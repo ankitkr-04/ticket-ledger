@@ -617,11 +617,11 @@ return new AuthenticatedUser(
 | ---------------- | ------ | ------------- | ------------------------------ |
 | `/auth/login`    | POST   | ❌ No          | Initial authentication         |
 | `/auth/refresh`  | POST   | ❌ No          | Rotate tokens                  |
-| `/auth/register` | POST   | ❌ No          | Customer signup & auto-login   |
+| `/auth/register` | POST   | ❌ No          | User signup & auto-login       |
 | `/auth/logout`   | POST   | ✅ Yes         | Revoke all user refresh tokens |
 
 **Registration:**
-- Customers self-register with email and password
+- Users self-register with email and password
 - Email verification skipped for MVP (`isVerified: true` by default)
 - Auto-login: Returns access token + refresh token immediately
 
