@@ -1,5 +1,6 @@
 package com.ticketledger.api.controller;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -7,10 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ticketledger.constant.RouteConstant;
-import com.ticketledger.dto.ApiResponse;
-import com.ticketledger.dto.AuthResponse;
-import com.ticketledger.dto.LoginRequest;
-import com.ticketledger.dto.RefreshTokenRequest;
+import com.ticketledger.dto.*;
 import com.ticketledger.service.AuthService;
 
 import jakarta.validation.Valid;
@@ -29,6 +27,17 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(ApiResponse.success(authService.login(request), "Login successful"));
+    }
+
+    /**
+     * Registers a new user and automatically logs them in.
+     * Returns Access Token + Refresh Token upon successful registration.
+     */
+    @PostMapping("/register")
+    public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.success(authService.register(request), "Registration successful"));
     }
 
     /**

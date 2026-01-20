@@ -1,114 +1,14 @@
 package com.ticketledger.service;
 
-import java.security.SecureRandom;
-import java.time.Instant;
-import java.util.Base64;
-
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import com.ticketledger.config.JwtProperties;
-import com.ticketledger.domain.model.entity.RefreshToken;
-import com.ticketledger.domain.model.entity.User;
-import com.ticketledger.domain.repository.RefreshTokenRepository;
-import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.dto.AuthResponse;
 import com.ticketledger.dto.LoginRequest;
 import com.ticketledger.dto.RefreshTokenRequest;
-import com.ticketledger.security.JwtService;
+import com.ticketledger.dto.RegisterRequest;
 
-import lombok.RequiredArgsConstructor;
+public interface AuthService {
+    AuthResponse login(LoginRequest request);
 
-@Service
-@RequiredArgsConstructor
-public class AuthService {
+    AuthResponse register(RegisterRequest request);
 
-    private final UserRepository userRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
-    private final JwtService jwtService;
-    private final AuthenticationManager authenticationManager;
-    private final JwtProperties jwtProperties;
-
-    // Secure random for opaque tokens (better than UUID)
-    private final SecureRandom secureRandom = new SecureRandom();
-
-    @Transactional
-    public AuthResponse login(LoginRequest request) {
-        // 1. Authenticate (Checks password)
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.email(), request.password()));
-
-        // 2. Fetch Entity
-        var user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-
-        // 3. Generate Tokens
-        var accessToken = jwtService.generateToken(user.getEmail()); // Now works with String overload
-        var refreshToken = createRefreshToken(user);
-
-        // 4. Return Response (using the 3-arg constructor from DTO step)
-        return new AuthResponse(
-                accessToken,
-                refreshToken.getToken(),
-                jwtProperties.accessTokenExpiration());
-    }
-
-    @Transactional
-    public AuthResponse refresh(RefreshTokenRequest request) {
-        String incomingToken = request.refreshToken();
-
-        // 1. Find token in DB
-        var refreshToken = refreshTokenRepository.findByToken(incomingToken)
-                .orElseThrow(() -> new RuntimeException("Refresh token not found"));
-
-        // 2. Security: Verify if revoked
-        if (refreshToken.isRevoked()) {
-            revokeAllUserTokens(refreshToken.getUser());
-            throw new RuntimeException("Security Alert: Reuse of revoked token detected");
-        }
-
-        // 3. Verify expiry
-        if (refreshToken.getExpiresAt().isBefore(Instant.now())) {
-            throw new RuntimeException("Refresh token expired");
-        }
-
-        // 4. Token Rotation: Revoke old, issue new
-        refreshToken.setRevoked(true);
-        refreshTokenRepository.save(refreshToken);
-
-        var user = refreshToken.getUser();
-        var newAccessToken = jwtService.generateToken(user.getEmail());
-        var newRefreshToken = createRefreshToken(user);
-
-        return new AuthResponse(
-                newAccessToken,
-                newRefreshToken.getToken(),
-                jwtProperties.accessTokenExpiration());
-    }
-
-    private RefreshToken createRefreshToken(User user) {
-        // Generate secure opaque string
-        byte[] randomBytes = new byte[32];
-        secureRandom.nextBytes(randomBytes);
-        String tokenString = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
-
-        var token = new RefreshToken();
-        token.setUser(user);
-        token.setToken(tokenString);
-        token.setExpiresAt(Instant.now().plusMillis(jwtProperties.refreshTokenExpiration()));
-        token.setRevoked(false);
-
-        return refreshTokenRepository.save(token);
-    }
-
-    private void revokeAllUserTokens(User user) {
-        var validTokens = refreshTokenRepository.findAllValidTokensByUser(user.getId());
-        if (validTokens.isEmpty())
-            return;
-        validTokens.forEach(t -> t.setRevoked(true));
-        refreshTokenRepository.saveAll(validTokens);
-    }
+    AuthResponse refresh(RefreshTokenRequest request);
 }
