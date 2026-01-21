@@ -43,4 +43,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      * Magic method for user history, ordered by creation time descending.
      */
     List<Booking> findByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    @Query("SELECT s.theater.id FROM Booking b JOIN b.showtime sh JOIN sh.screen s WHERE b.id = :id")
+    Optional<UUID> findTheaterIdById(@Param("id") UUID id);
 }

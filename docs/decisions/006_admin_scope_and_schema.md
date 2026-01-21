@@ -218,27 +218,25 @@ ALTER TYPE showtime_status ADD VALUE IF NOT EXISTS 'PAUSED';
 Every admin endpoint must validate theater access:
 
 ```java
-@Service
-public class AdminAuthorizationService {
+```java
+public interface AdminAuthorizationService {
     
-    public void assertTheaterAccess(UUID userId, UUID theaterId) {
-        boolean hasAccess = adminTheaterAccessRepository
-            .existsByUserIdAndTheaterId(userId, theaterId);
-        
-        if (!hasAccess) {
-            throw new ForbiddenException(
-                "User does not have access to theater: " + theaterId
-            );
-        }
-    }
+    /**
+     * Asserts that the currently authenticated user has access to the theater.
+     * Retrives userId from SecurityContext.
+     */
+    void assertTheaterAccess(UUID theaterId);
     
-    public void assertScreenAccess(UUID userId, UUID screenId) {
-        Screen screen = screenRepository.findById(screenId)
-            .orElseThrow(() -> new NotFoundException("Screen not found"));
-        
-        assertTheaterAccess(userId, screen.getTheater().getId());
-    }
+    /**
+     * Asserts that the currently authenticated user has access to the theater owning the screen.
+     */
+    void assertScreenAccess(UUID screenId);
+
+    void assertShowtimeAccess(UUID showtimeId);
+
+    void assertBookingAccess(UUID bookingId);
 }
+```
 ```
 
 ### Example Controller Usage
@@ -250,10 +248,9 @@ public ScreenResponse createScreen(
     @PathVariable UUID theaterId,
     @RequestBody CreateScreenRequest request
 ) {
-    UUID currentUserId = SecurityContext.getCurrentUserId();
-    
+) {
     // 1. Verify theater access
-    adminAuthService.assertTheaterAccess(currentUserId, theaterId);
+    adminAuthService.assertTheaterAccess(theaterId);
     
     // 2. Proceed with operation
     return screenService.createScreen(theaterId, request);
