@@ -35,24 +35,32 @@ CREATE EXTENSION IF NOT EXISTS "btree_gist";  -- Required for exclusion constrai
 
 ### UUID Strategy
 - **Version:** UUIDv7 (time-ordered, monotonically increasing)
-- **Database Function:** `uuidv7()` (native in Postgres 18)
-- **Application Layer:** `java-uuid-generator` library for consistency
-- **Benefits:** 
-  - Better B-tree index performance than UUIDv4
-  - Sortable by creation time (timestamp embedded)
-  - Reduced index fragmentation
-- **Example:** `019535d9-3df7-79fb-b466-fa907fa17f9e`
+- **Generation Strategy:** Hybrid (application-preferred, database fallback)
 
-**Implementation Note:**
-```sql
--- Database default (Postgres 18)
-CREATE TABLE example (
-    id UUID PRIMARY KEY DEFAULT uuidv7()
-);
+**Application Layer (Primary):**
+- **Library:** `com.fasterxml.uuid:java-uuid-generator:4.3.0`
+- **Usage:** Business logic, idempotency, testing
+- **Example:** `UUID id = Generators.timeBasedEpochGenerator().generate();`
 
--- Application layer (Java) generates UUIDs before insert for consistency
-UUID id = Generators.timeBasedEpochGenerator().generate();
-```
+**Database Layer (Fallback):**
+- **Function:** Custom `uuidv7()` function (see migration)
+- **Usage:** Seeding scripts, direct SQL inserts, database triggers
+
+**Why Hybrid?**
+| Scenario          | Generator   | Reason                            |
+| ----------------- | ----------- | --------------------------------- |
+| Normal API calls  | Application | Control, testability, idempotency |
+| Seeding data      | Database    | Convenience in SQL scripts        |
+| Database triggers | Database    | No application layer available    |
+| Admin SQL queries | Database    | Direct database operations        |
+
+**Benefits:**
+- Better B-tree index performance than UUIDv4 (time-ordered)
+- Sortable by creation time without separate timestamp
+- ~85% less index fragmentation than random UUIDs
+- Compatible with both application and database generation
+
+**⚠️ Source of Truth:** See migration `V1__init_complete_schema.sql` for `uuidv7()` function implementation.
 
 ---
 
@@ -162,6 +170,10 @@ erDiagram
 
 ## 🗂️ ENUM Types
 
+**⚠️ Source of Truth:** Migration `V1__init_complete_schema.sql`
+
+For business logic rules (state transitions), see [`02_lifecycle_states.md`](./02_lifecycle_states.md).
+
 ### `user_role`
 ```sql
 CREATE TYPE user_role AS ENUM ('CUSTOMER', 'ADMIN');
@@ -262,6 +274,7 @@ CREATE TYPE showtime_status AS ENUM ('ACTIVE', 'PAUSED', 'INACTIVE');
 | `is_verified`       | `BOOLEAN`      | `DEFAULT FALSE`                | Email verification status     |
 | `full_name`         | `VARCHAR(255)` | `NULL`                         | User's display name           |
 | `profile_image_url` | `TEXT`         | `NULL`                         | Profile picture URL           |
+| `version`           | `BIGINT`       | `DEFAULT 0`                    | Optimistic locking counter    |
 | `deleted_at`        | `TIMESTAMPTZ`  | `NULL`                         | Soft delete timestamp         |
 | `created_at`        | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Account creation time         |
 | `updated_at`        | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Last profile update           |
@@ -379,6 +392,12 @@ UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = 'user-uuid';
 | `updated_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()` | Last modification timestamp                          |
 | `expires_at`      | `TIMESTAMPTZ` | `NOT NULL`      | Expiry time for cleanup (created_at + 24h)           |
 
+**Foreign Keys:**
+```sql
+CONSTRAINT fk_idempotency_keys_user 
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+```
+
 **Indexes:**
 ```sql
 -- User isolation lookup
@@ -431,12 +450,17 @@ VALUES ('client-provided-uuid', 'user-uuid', NOW() + INTERVAL '24 hours');
 | `name`       | `VARCHAR(255)` | `NOT NULL`                     | Theater name (e.g., "PVR Phoenix") |
 | `city`       | `VARCHAR(100)` | `NOT NULL`                     | City location                      |
 | `address`    | `TEXT`         | `NULL`                         | Full street address                |
+| `version`    | `BIGINT`       | `DEFAULT 0`                    | Optimistic locking counter         |
 | `deleted_at` | `TIMESTAMPTZ`  | `NULL`                         | Soft delete timestamp              |
 | `created_at` | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Theater created time               |
 | `updated_at` | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Last modification time             |
 
 **Indexes:**
 ```sql
+-- Theater name uniqueness per city (only for active theaters)
+CREATE UNIQUE INDEX idx_theaters_name_city_active ON theaters(name, city)
+WHERE deleted_at IS NULL;
+
 -- Theater name and city lookup
 CREATE INDEX idx_theaters_name_city ON theaters(name, city) 
 WHERE deleted_at IS NULL;
@@ -461,12 +485,15 @@ CREATE INDEX idx_theaters_deleted ON theaters(deleted_at);
 
 **Purpose:** Many-to-many junction table for theater-scoped admin access control
 
-| Column       | Type          | Constraints                                           | Description                    |
-| ------------ | ------------- | ----------------------------------------------------- | ------------------------------ |
-| `user_id`    | `UUID`        | `REFERENCES users(id) ON DELETE CASCADE, NOT NULL`    | Which admin user               |
-| `theater_id` | `UUID`        | `REFERENCES theaters(id) ON DELETE CASCADE, NOT NULL` | Which theater they can manage  |
-| `granted_at` | `TIMESTAMPTZ` | `DEFAULT NOW()`                                       | When access was granted        |
-| `revoked_at` | `TIMESTAMPTZ` | `NULL`                                                | When access was revoked (soft) |
+| Column       | Type          | Constraints                                           | Description                     |
+| ------------ | ------------- | ----------------------------------------------------- | ------------------------------- |
+| `id`         | `UUID`        | `PRIMARY KEY DEFAULT uuidv7()`                        | UUIDv7 access record identifier |
+| `user_id`    | `UUID`        | `REFERENCES users(id) ON DELETE CASCADE, NOT NULL`    | Which admin user                |
+| `theater_id` | `UUID`        | `REFERENCES theaters(id) ON DELETE CASCADE, NOT NULL` | Which theater they can manage   |
+| `granted_at` | `TIMESTAMPTZ` | `DEFAULT NOW()`                                       | When access was granted         |
+| `revoked_at` | `TIMESTAMPTZ` | `NULL`                                                | When access was revoked (soft)  |
+| `created_at` | `TIMESTAMPTZ` | `DEFAULT NOW()`                                       | Record creation time            |
+| `updated_at` | `TIMESTAMPTZ` | `DEFAULT NOW()`                                       | Last modification time          |
 
 **Constraints:**
 ```sql
@@ -528,6 +555,7 @@ WHERE user_id = :adminId AND theater_id = :theaterId;
 | `theater_id`  | `UUID`        | `REFERENCES theaters(id) ON DELETE RESTRICT, NOT NULL` | Which theater contains screen   |
 | `name`        | `VARCHAR(50)` | `NOT NULL`                                             | Display name (e.g., "Screen 1") |
 | `total_seats` | `INT`         | `DEFAULT 0`                                            | Total capacity (informational)  |
+| `version`     | `BIGINT`      | `DEFAULT 0`                                            | Optimistic locking counter      |
 | `deleted_at`  | `TIMESTAMPTZ` | `NULL`                                                 | Soft delete timestamp           |
 | `created_at`  | `TIMESTAMPTZ` | `DEFAULT NOW()`                                        | Screen added time               |
 | `updated_at`  | `TIMESTAMPTZ` | `DEFAULT NOW()`                                        | Last modification time          |
@@ -574,9 +602,11 @@ CREATE INDEX idx_screens_deleted ON screens(deleted_at);
 | `thumbnail_url`    | `TEXT`         | `NULL`                         | Poster/thumbnail image URL   |
 | `genre`            | `VARCHAR(100)` | `NULL`                         | Movie genre (e.g., "Action") |
 | `language`         | `VARCHAR(50)`  | `NULL`                         | Primary language             |
+| `version`          | `BIGINT`       | `DEFAULT 0`                    | Optimistic locking counter   |
 | `deleted_at`       | `TIMESTAMPTZ`  | `NULL`                         | Soft delete timestamp        |
 | `created_at`       | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Movie added time             |
 | `updated_at`       | `TIMESTAMPTZ`  | `DEFAULT NOW()`                | Last modification time       |
+
 **Indexes:**
 ```sql
 -- Active movies for catalog
@@ -607,6 +637,7 @@ CREATE INDEX idx_movies_deleted ON movies(deleted_at);
 | `start_time` | `TIMESTAMPTZ`     | `NOT NULL`                     | Screening start time       |
 | `end_time`   | `TIMESTAMPTZ`     | `NOT NULL`                     | Screening end time         |
 | `status`     | `showtime_status` | `DEFAULT 'ACTIVE'`             | Booking availability       |
+| `version`    | `BIGINT`          | `DEFAULT 0`                    | Optimistic locking counter |
 | `deleted_at` | `TIMESTAMPTZ`     | `NULL`                         | Soft delete timestamp      |
 | `created_at` | `TIMESTAMPTZ`     | `DEFAULT NOW()`                | Showtime created time      |
 | `updated_at` | `TIMESTAMPTZ`     | `DEFAULT NOW()`                | Last status change         |
@@ -727,6 +758,7 @@ CREATE INDEX idx_seats_version ON seats(id, version);
 | `confirmed_at` | `TIMESTAMPTZ`    | `NULL`                         | Payment success timestamp              |
 | `cancelled_at` | `TIMESTAMPTZ`    | `NULL`                         | User cancellation timestamp            |
 | `completed_at` | `TIMESTAMPTZ`    | `NULL`                         | Showtime passed timestamp              |
+| `version`      | `BIGINT`         | `DEFAULT 0`                    | Optimistic locking counter             |
 | `created_at`   | `TIMESTAMPTZ`    | `DEFAULT NOW()`                | Booking initiated time                 |
 | `updated_at`   | `TIMESTAMPTZ`    | `DEFAULT NOW()`                | Last status change                     |
 
@@ -801,6 +833,8 @@ CREATE INDEX idx_booking_seats_seat ON booking_seats(seat_id);
 | `provider_transaction_id` | `VARCHAR(255)`   | `NULL`                         | External gateway transaction ID             |
 | `provider_response`       | `JSONB`          | `NULL`                         | Raw gateway response (debugging)            |
 | `provider_captured_at`    | `TIMESTAMPTZ`    | `NULL`                         | When gateway confirmed payment              |
+| `attempt_number`          | `INT`            | `DEFAULT 1`                    | Sequential attempt counter for this booking |
+| `version`                 | `BIGINT`         | `DEFAULT 0`                    | Optimistic locking counter                  |
 | `created_at`              | `TIMESTAMPTZ`    | `DEFAULT NOW()`                | Payment initiated time                      |
 | `updated_at`              | `TIMESTAMPTZ`    | `DEFAULT NOW()`                | Last status update                          |
 
@@ -846,19 +880,21 @@ LIMIT 1;
 
 **Purpose:** Immutable ledger of all administrative actions requiring accountability
 
-| Column            | Type          | Constraints                               | Description                                     |
-| ----------------- | ------------- | ----------------------------------------- | ----------------------------------------------- |
-| `id`              | `UUID`        | `PRIMARY KEY DEFAULT uuidv7()`            | UUIDv7 audit entry identifier                   |
-| `admin_user_id`   | `UUID`        | `REFERENCES users(id) ON DELETE RESTRICT` | Which admin performed the action                |
-| `booking_id`      | `UUID`        | `REFERENCES bookings(id), NULL`           | Target booking (for refunds)                    |
-| `showtime_id`     | `UUID`        | `REFERENCES showtimes(id), NULL`          | Target showtime (for pauses)                    |
-| `theater_id`      | `UUID`        | `REFERENCES theaters(id), NULL`           | Target theater (for theater ops)                |
-| `action`          | `VARCHAR(50)` | `NOT NULL`                                | Action type (e.g., "REFUND", "PAUSE")           |
-| `status`          | `VARCHAR(20)` | `NOT NULL`                                | Execution status (INITIATED, COMPLETED, FAILED) |
-| `reason`          | `TEXT`        | `NOT NULL`                                | Mandatory justification for action              |
-| `idempotency_key` | `VARCHAR(64)` | `UNIQUE, NULL`                            | Prevents duplicate execution                    |
-| `created_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()`                           | Action initiated time                           |
-| `updated_at`      | `TIMESTAMPTZ` | `DEFAULT NOW()`                           | Status last updated                             |
+| Column             | Type           | Constraints                               | Description                                       |
+| ------------------ | -------------- | ----------------------------------------- | ------------------------------------------------- |
+| `id`               | `UUID`         | `PRIMARY KEY DEFAULT uuidv7()`            | UUIDv7 audit entry identifier                     |
+| `admin_user_id`    | `UUID`         | `REFERENCES users(id) ON DELETE RESTRICT` | Which admin performed the action                  |
+| `booking_id`       | `UUID`         | `REFERENCES bookings(id), NULL`           | Target booking (for refunds)                      |
+| `showtime_id`      | `UUID`         | `REFERENCES showtimes(id), NULL`          | Target showtime (for pauses)                      |
+| `theater_id`       | `UUID`         | `REFERENCES theaters(id), NULL`           | Target theater (for theater ops)                  |
+| `action`           | `VARCHAR(50)`  | `NOT NULL`                                | Action type (e.g., "REFUND", "PAUSE")             |
+| `status`           | `VARCHAR(20)`  | `NOT NULL`                                | Execution status (INITIATED, COMPLETED, FAILED)   |
+| `reason`           | `TEXT`         | `NOT NULL`                                | Mandatory justification for action                |
+| `idempotency_key`  | `VARCHAR(64)`  | `UNIQUE, NULL`                            | Prevents duplicate execution                      |
+| `stripe_refund_id` | `VARCHAR(100)` | `NULL`                                    | External Stripe refund ID (for reconciliation)    |
+| `completed_at`     | `TIMESTAMPTZ`  | `NULL`                                    | When action completed (NULL if still in progress) |
+| `created_at`       | `TIMESTAMPTZ`  | `DEFAULT NOW()`                           | Action initiated time                             |
+| `updated_at`       | `TIMESTAMPTZ`  | `DEFAULT NOW()`                           | Status last updated                               |
 
 **Constraints:**
 ```sql
@@ -1062,65 +1098,12 @@ CREATE INDEX idx_bookings_reaper ON bookings(status, locked_until);
 
 ---
 
-## 📋 Soft Delete Query Patterns
-
-### Standard Queries
-
-```sql
--- Find active users
-SELECT * FROM users WHERE deleted_at IS NULL;
-
--- Find deleted users (admin view)
-SELECT * FROM users WHERE deleted_at IS NOT NULL;
-
--- Soft delete user
-UPDATE users SET deleted_at = NOW() WHERE id = 'user-123';
-
--- Restore soft-deleted user
-UPDATE users SET deleted_at = NULL WHERE id = 'user-123';
-```
-
-### Application Layer Considerations
-
-```java
-// JPA Entity with soft delete
-@Entity
-@Where(clause = "deleted_at IS NULL")  // Hibernate
-@SQLDelete(sql = "UPDATE users SET deleted_at = NOW() WHERE id = ?")
-public class User {
-    @Column(name = "deleted_at")
-    private Instant deletedAt;
-}
-
-// Query only active records (automatic with @Where)
-userRepository.findByEmail("john@example.com");
-
-// Include deleted records (override)
-@Query("SELECT u FROM User u WHERE u.email = :email")
-User findByEmailIncludingDeleted(@Param("email") String email);
-```
-
----
-
-## 🔍 Cross-Reference
+## � Cross-Reference
 
 - **State Machines:** See `02_lifecycle_states.md`
 - **Transaction Flows:** See `03_sequence_flows.md`
-- **API Contracts:** See `05_api_contracts.md` (future)
-- **Migration Scripts:** See `/migrations/` directory (future)
-
----
-
-## 📊 Schema Statistics (Estimated)
-
-| Metric                 | Value | Note                                                   |
-| ---------------------- | ----- | ------------------------------------------------------ |
-| **Tables**             | 14    | Core + auth + idempotency + theaters + audit           |
-| **Indexes**            | 35+   | Performance-critical + soft delete + theater scoping   |
-| **ENUMs**              | 5     | Strict type safety                                     |
-| **Foreign Keys**       | 15    | Referential integrity + theater scoping                |
-| **Constraints**        | 13    | Uniqueness + exclusion + soft delete + theater scoping |
-| **Soft Delete Tables** | 6     | Master data + theaters                                 |
+- **API Contracts:** See `05_api_contracts.md`
+- **Migration Scripts:** See `V1__init_complete_schema.sql`
 
 ---
 

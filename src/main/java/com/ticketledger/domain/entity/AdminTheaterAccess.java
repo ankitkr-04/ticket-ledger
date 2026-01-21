@@ -1,5 +1,7 @@
 package com.ticketledger.domain.entity;
 
+import java.time.LocalDateTime;
+
 import com.ticketledger.domain.base.BaseEntity;
 
 import jakarta.persistence.*;
@@ -10,9 +12,7 @@ import lombok.*;
  * Represents theater-scoped access control for admin operations.
  */
 @Entity
-@Table(name = "admin_theater_access", uniqueConstraints = {
-        @UniqueConstraint(name = "uq_admin_theater", columnNames = { "user_id", "theater_id" })
-})
+@Table(name = "admin_theater_access")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -28,13 +28,14 @@ public class AdminTheaterAccess extends BaseEntity {
     @JoinColumn(name = "theater_id", nullable = false)
     private Theater theater;
 
-    /**
-     * Factory method to create access grant
-     */
-    public static AdminTheaterAccess grant(User admin, Theater theater) {
-        return AdminTheaterAccess.builder()
-                .user(admin)
-                .theater(theater)
-                .build();
+    @Column(name = "granted_at", nullable = false)
+    @Builder.Default
+    private LocalDateTime grantedAt = LocalDateTime.now();
+
+    @Column(name = "revoked_at")
+    private LocalDateTime revokedAt;
+
+    public boolean isActive() {
+        return revokedAt == null;
     }
 }

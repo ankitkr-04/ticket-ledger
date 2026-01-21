@@ -1,10 +1,12 @@
 package com.ticketledger.domain.base;
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.*;
+import java.time.Instant;
 
-import java.time.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.MappedSuperclass;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Base entity for entities supporting soft delete.

@@ -680,21 +680,6 @@ SET TRANSACTION ISOLATION LEVEL READ COMMITTED;  -- Default
 - `READ COMMITTED` is sufficient (we use explicit locks)
 - `SERIALIZABLE` would be overkill (performance penalty)
 
-**Timing Analysis:**
-
-| Event | Time (ms) | Request A               | Request B                  |
-| ----- | --------- | ----------------------- | -------------------------- |
-| T+0   | 0         | BEGIN TX                | BEGIN TX                   |
-| T+1   | 5         | Lock acquired on A1, A2 | Waiting for A1             |
-| T+2   | 15        | UPDATE seats            | Still waiting              |
-| T+3   | 20        | INSERT booking          | Still waiting              |
-| T+4   | 25        | COMMIT (lock released)  | Lock acquired on A1, A3    |
-| T+5   | 30        | Response sent           | Check A1 status (now HELD) |
-| T+6   | 35        | -                       | ROLLBACK                   |
-| T+7   | 40        | -                       | 409 Conflict sent          |
-
-**Total Wait Time for Request B:** ~25ms (typical single-datacenter)
-
 **Edge Cases Handled:**
 
 | Scenario                             | Outcome                                  |
@@ -703,39 +688,6 @@ SET TRANSACTION ISOLATION LEVEL READ COMMITTED;  -- Default
 | Deadlock (circular wait)             | Prevented by sorted lock acquisition     |
 | Request A crashes before COMMIT      | Postgres auto-rollback, lock released    |
 | Request B timeout while waiting      | Connection pool timeout → 503 error      |
-
-**Monitoring Metrics:**
-
-```java
-// Track lock wait times
-metrics.histogram("db.lock.wait.ms", lockWaitTime);
-
-// Track contention rate
-metrics.counter("booking.concurrent.conflict").increment();
-
-// Alert on high deadlock rate (should be zero with sorting)
-metrics.counter("db.deadlock.detected").increment();
-```
-
-**Performance Tuning:**
-
-1. **Index on seat_id:**
-```sql
-CREATE INDEX idx_seats_id_status ON seats(id, status);
--- Enables fast lock acquisition
-```
-
-2. **Connection Pool Tuning:**
-```yaml
-spring.datasource.hikari:
-  maximum-pool-size: 50
-  connection-timeout: 5000  # Max wait for connection (ms)
-```
-
-3. **Lock Timeout Configuration (PostgreSQL):**
-```sql
-SET lock_timeout = '5s';  -- Fail request if lock wait > 5s
-```
 
 **Concurrency Properties:**
 
@@ -753,22 +705,6 @@ The system handles concurrent booking requests using PostgreSQL's `SELECT ... FO
 - ✅ **Performance:** Minimal lock holding time (~25ms)
 - ✅ **Fairness:** First request to acquire lock wins
 - ✅ **No Deadlocks:** Sorted lock acquisition guarantees
-
----
-
-## 📊 Flow Summary Matrix
-
-| Flow            | Trigger          | Frequency | Transaction Size     | Failure Impact              |
-| --------------- | ---------------- | --------- | -------------------- | --------------------------- |
-| **A: Reserve**  | User API         | High      | Small (1-10 seats)   | Low (user retries)          |
-| **A.1: Retry**  | User API         | Medium    | Tiny (1 payment row) | Low (user retries)          |
-| **B: Webhook**  | Gateway Event    | High      | Small (1 booking)    | Medium (needs idempotency)  |
-| **C: Redirect** | User Navigation  | Medium    | Tiny (read + update) | Low (polling handles)       |
-| **D: Reaper**   | Cron (1 min)     | Constant  | Batch (100 bookings) | Low (background)            |
-| **E: Cancel**   | User API         | Low       | Small (1 booking)    | High (refund involved)      |
-| **F: Expiry**   | Cron (1 hour)    | Constant  | Batch (50 showtimes) | Low (background)            |
-| **G: Error**    | System Exception | Low       | N/A (rollback)       | Critical (needs monitoring) |
-| **H: Race**     | Concurrent Users | High      | Small (1-10 seats)   | Expected (business logic)   |
 
 ---
 

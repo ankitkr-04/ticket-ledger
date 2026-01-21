@@ -104,38 +104,6 @@ Deep dives into architectural choices and trade-offs:
 
 ---
 
-## 📝 Recent Updates
-
-### January 20, 2026
-1. ✅ Implemented user registration endpoint (POST /auth/register)
-2. ✅ Implemented logout endpoint (POST /auth/logout) with token revocation
-3. ✅ Created Virtual Threads concurrency model documentation
-4. ✅ Created Event-Driven Notifications architecture documentation
-5. ✅ Created Observability & Structured Logging strategy documentation
-6. ✅ Converted all diagrams to Mermaid format
-7. ✅ Refactored AuthService to interface + implementation pattern
-
-### January 19, 2026
-1. ✅ Added comprehensive authentication strategy documentation
-2. ✅ Documented JWT + Opaque token hybrid approach
-3. ✅ Explained token rotation security with attack scenarios
-4. ✅ Analyzed DB performance trade-offs (4% overhead)
-5. ✅ Added Mermaid diagrams for token lifecycle and attack timelines
-6. ✅ Created idempotency storage strategy document
-7. ✅ Documented PostgreSQL row-level locking for concurrency
-8. ✅ Added failure invariant (transaction rollback safety)
-9. ✅ Updated database schema with idempotency_keys table
-
-### January 18, 2026
-1. ✅ Added payment retry endpoint for handling declined cards
-2. ✅ Clarified `seats.status` as materialized lock state (not source of truth)
-3. ✅ Added Flow H: Concurrent Seat Reservation (the race condition diagram)
-4. ✅ Added security constraints for `error.context` field
-5. ✅ Marked frontend sections as non-normative
-6. ✅ Restructured docs to linear numbered sequence
-
----
-
 ## 🏗️ Architecture Principles
 
 1. **Bookings are the Financial Ledger** - Never delete, only state transition
@@ -155,7 +123,6 @@ Deep dives into architectural choices and trade-offs:
 When updating documentation:
 - ✅ Maintain the numbered sequence
 - ✅ Update cross-references if file structure changes
-- ✅ Add to "Recent Updates" section above
 - ✅ Keep "Design First" narrative flow
 
 ---

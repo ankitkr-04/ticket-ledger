@@ -125,25 +125,7 @@ public BookingResponse getBooking(@PathVariable UUID id) {
 }
 ```
 
-#### 4.3 Parking: Efficient I/O Waiting
-
-When a virtual thread blocks (e.g., waiting for DB lock), the JVM **unmounts** it from the carrier thread:
-
-```
-┌──────────────────────────────────────────┐
-│ Carrier Thread (OS Thread)               │
-├──────────────────────────────────────────┤
-│ VThread-1 → Blocked on DB Lock           │
-│   ↓ JVM detects blocking I/O             │
-│   ↓ Unmounts VThread-1                   │
-│ VThread-2 → Executes while VT-1 waits    │
-│   ↓ DB returns result for VT-1           │
-│   ↓ JVM remounts VThread-1               │
-│ VThread-1 → Continues execution          │
-└──────────────────────────────────────────┘
-```
-
-**Result:** One OS thread can serve thousands of virtual threads efficiently.
+**Key Insight:** When a virtual thread blocks on I/O, the JVM unmounts it from the carrier thread, allowing other virtual threads to run. One OS thread can serve thousands of virtual threads efficiently.
 
 ---
 
@@ -199,86 +181,32 @@ spring:
 - 9,980 threads park efficiently waiting for a connection
 ```
 
-**Key Point:** Virtual threads make **waiting efficient**, but they cannot magically create more DB connections. The database is still the bottleneck.
-
-**Solution:**
-- Scale DB connection pool based on DB server capacity (not thread count)
-- Monitor connection pool utilization: `hikaricp_connections_active`
-- Consider read replicas for read-heavy queries
-
-### 5.3 Failure Modes: Unbounded Thread Creation
-
-**Risk:** What if we spawn 100,000 threads due to a traffic spike?
-
-**Protections:**
-1. **Rate Limiting:** Enforce request rate limits (e.g., 100 req/sec per IP)
-2. **Connection Pool:** Acts as natural backpressure (threads queue for DB connections)
-3. **Load Balancer Limits:** Cloud provider limits (e.g., AWS ALB max connections)
-4. **Circuit Breakers:** Fail fast if downstream services are overloaded
-
-**Monitoring:**
-```java
-// Metrics to track
-- jvm.threads.live (should grow with load but not infinitely)
-- hikaricp.connections.pending (backpressure indicator)
-- http.server.requests.active (concurrent requests)
-```
+**Key Point:** Virtual threads make **waiting efficient**, but they cannot magically create more DB connections. The database is still the bottleneck. Monitor `hikaricp_connections_active`.
 
 ---
 
-## 6. Trade-offs
+## 6. Trade-offs: Virtual Threads vs Reactive
 
-### Virtual Threads vs Reactive/WebFlux
-
-| Aspect               | Virtual Threads          | Reactive (WebFlux)       |
-| -------------------- | ------------------------ | ------------------------ |
-| **Learning Curve**   | ✅ Low (familiar model)   | ❌ High (reactive chains) |
-| **Code Readability** | ✅ Sequential/imperative  | ❌ Callback hell          |
-| **JDBC Support**     | ✅ Fully compatible       | ⚠️ Requires R2DBC         |
-| **Debugging**        | ✅ Standard stack traces  | ❌ Complex async stacks   |
-| **Library Support**  | ✅ All blocking libraries | ⚠️ Needs reactive libs    |
-| **Performance**      | ✅ Excellent for I/O      | ✅ Excellent for I/O      |
-| **Maturity**         | ⚠️ New (Java 21+)         | ✅ Mature (Spring 5+)     |
+| Aspect             | Virtual Threads         | Reactive (WebFlux)       |
+| ------------------ | ----------------------- | ------------------------ |
+| **Learning Curve** | ✅ Low (familiar model)  | ❌ High (reactive chains) |
+| **JDBC Support**   | ✅ Fully compatible      | ⚠️ Requires R2DBC         |
+| **Debugging**      | ✅ Standard stack traces | ❌ Complex async stacks   |
 
 **Decision:** Virtual Threads win for **developer productivity** and **maintainability** in this MVP phase.
 
 ---
 
-## 7. Alternatives Considered
-
-### 7.1 Platform Threads + Larger Pool
-
-**Approach:** Increase Tomcat thread pool to 1000 threads
-
-**Rejected Because:**
-- 1000 threads × 1MB = 1GB memory just for thread stacks
-- Context switching overhead increases with thread count
-- Does not solve the core problem (blocking I/O)
-
-### 7.2 Project Reactor (WebFlux)
-
-**Approach:** Rewrite entire application using reactive programming
-
-**Rejected Because:**
-- Steep learning curve for team
-- R2DBC has limited driver support vs JDBC
-- Complex debugging and error handling
-- Overkill for MVP timeline
-
----
-
-## 8. Implementation Checklist
+## 7. Implementation Checklist
 
 - [x] Enable `spring.threads.virtual.enabled=true`
 - [ ] Audit codebase for `synchronized` blocks → Replace with `ReentrantLock`
 - [ ] Configure JVM flag `-Djdk.tracePinnedThreads=full` in dev/staging
-- [ ] Monitor `jvm.threads.live` and `hikaricp.connections.pending` metrics
-- [ ] Document pinning risks in team wiki
-- [ ] Load test with 10,000 concurrent requests
+- [ ] Monitor `hikaricp.connections.pending` metrics
 
 ---
 
-## 9. References
+## 8. References
 
 - [JEP 444: Virtual Threads](https://openjdk.org/jeps/444)
 - [Spring Boot 3.2 Virtual Threads Support](https://spring.io/blog/2023/09/09/all-together-now-spring-boot-3-2-graalvm-native-images-java-21-and-virtual-threads)
