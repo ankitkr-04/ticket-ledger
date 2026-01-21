@@ -1,12 +1,19 @@
 package com.ticketledger.domain.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.*;
+import java.math.BigDecimal;
+import java.time.Instant;
 
-import java.math.*;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
-import com.ticketledger.domain.base.SoftDeletableEntity;
+import com.ticketledger.domain.base.BaseEntity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Represents a pricing tier for seats (e.g., VIP, Regular, Balcony).
@@ -18,11 +25,14 @@ import com.ticketledger.domain.base.SoftDeletableEntity;
 @Getter
 @Setter
 @NoArgsConstructor
-public class SeatTier extends SoftDeletableEntity {
+public class SeatTier extends BaseEntity {
 
     @Column(nullable = false, length = 50)
     private String name;
 
     @Column(name = "price_multiplier", precision = 3, scale = 2)
     private BigDecimal priceMultiplier = BigDecimal.ONE;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 }

@@ -39,9 +39,9 @@ public class ConcurrencyIntegrationTest {
     private JwtService jwtService;
 
     // IDs match src/test/resources/sql/seed_test_data.sql
-    private final UUID SHOWTIME_ID = UUID.fromString("44444444-4444-4444-4444-444444444444");
-    private final UUID SEAT_1_ID = UUID.fromString("55555555-5555-5555-5555-555555555551");
-    private final UUID SEAT_2_ID = UUID.fromString("55555555-5555-5555-5555-555555555552");
+    private final UUID SHOWTIME_ID = UUID.fromString("01937b5c-a444-7000-8000-444444444444");
+    private final UUID SEAT_1_ID = UUID.fromString("01937b5c-a555-7000-8000-555555555551");
+    private final UUID SEAT_2_ID = UUID.fromString("01937b5c-a555-7000-8000-555555555552");
 
     private String authToken;
 

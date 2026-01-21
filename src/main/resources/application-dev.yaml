@@ -60,3 +60,7 @@ booking:
   currency: INR
   cleanup-interval-ms: 60000  # 1 minute
 
+ticketledger:
+  payment:
+    stripe:
+      secret-key: mock_stripe_secret_key_for_dev_environment

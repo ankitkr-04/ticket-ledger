@@ -10,12 +10,9 @@ import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.dto.AdminRefundRequest;
 import com.ticketledger.dto.ApiResponse;
 import com.ticketledger.dto.RefundResponse;
-import com.ticketledger.security.AuthenticatedUser;
 import com.ticketledger.service.AdminAuthorizationService;
 import com.ticketledger.service.BookingService;
-import com.ticketledger.util.SecurityUtil;
 
-import io.micrometer.tracing.Tracer;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +25,6 @@ public class AdminBookingController {
 
     private final BookingService bookingService;
     private final AdminAuthorizationService adminAuthorizationService;
-    private final Tracer tracer;
 
     /**
      * Process a manual refund for a booking.
@@ -62,8 +58,8 @@ public class AdminBookingController {
                 adminId,
                 idempotencyKey);
 
-        String requestId = tracer.currentSpan() != null ? tracer.currentSpan().context().traceId()
-                : UUID.randomUUID().toString();
+        String requestId = UUID.randomUUID().toString();
+
         return ResponseEntity.ok(ApiResponse.success(response, requestId));
     }
 }

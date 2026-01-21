@@ -14,12 +14,30 @@ spring:
 
 security:
   jwt:
-    secret-key: "TEST_SECRET_KEY_MUST_BE_LONG_ENOUGH_FOR_HMAC_SHA_256"
-    access-token-expiration: 5000       # 5 seconds (Fast expiry tests)
-    refresh-token-expiration: 60000     # 1 minute
+    # 32+ char secret for DEV only. Use Env Vars for PROD.
+    secret-key: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    access-token-expiration: 5000     # 5 seconds (Fast expiration for tests)
+    refresh-token-expiration: 60000  # 1 minute (Fast expiration for tests)
+  cors:
+    allowed-origins:
+      - "http://localhost:3000"
+      - "http://localhost:8080"
+    allowed-methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "OPTIONS"
+    allowed-headers: "*"
+    allow-credentials: true
 
 booking:
   lock-duration-minutes: 10             # Test booking hold time
   default-base-price: 10.00
   currency: INR
   cleanup-interval-ms: 5000             # 5 seconds (Fast cleanup for tests)
+
+ticketledger:
+  payment:
+    stripe:
+      secret-key: mock_stripe_secret_key_for_dev_environment

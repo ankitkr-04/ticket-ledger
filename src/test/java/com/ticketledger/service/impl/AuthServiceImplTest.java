@@ -96,7 +96,7 @@ class AuthServiceImplTest {
     @Test
     void register_ShouldCreateUserAndReturnTokens_WhenEmailIsUnique() {
         // Arrange
-        RegisterRequest request = new RegisterRequest("newuser@example.com", "password123");
+        RegisterRequest request = new RegisterRequest("newuser@example.com", "password123", null, null, null);
 
         when(userRepository.existsByEmail("newuser@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("hashedPassword123");
@@ -130,7 +130,7 @@ class AuthServiceImplTest {
     @Test
     void register_ShouldThrowBusinessException_WhenEmailAlreadyExists() {
         // Arrange
-        RegisterRequest request = new RegisterRequest("existing@example.com", "password123");
+        RegisterRequest request = new RegisterRequest("existing@example.com", "password123", null, null, null);
         when(userRepository.existsByEmail("existing@example.com")).thenReturn(true);
 
         // Act & Assert

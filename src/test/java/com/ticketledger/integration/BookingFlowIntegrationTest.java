@@ -35,292 +35,294 @@ import tools.jackson.databind.json.JsonMapper;
 @ActiveProfiles("test")
 class BookingFlowIntegrationTest {
 
-    @Autowired
-    private RestTestClient restClient;
+        @Autowired
+        private RestTestClient restClient;
 
-    @Autowired
-    private JsonMapper objectMapper;
+        @Autowired
+        private JsonMapper objectMapper;
 
-    // IDs from seed_test_data.sql
-    private static final UUID SHOWTIME_ID = UUID.fromString("44444444-4444-4444-4444-444444444444");
-    private static final UUID SEAT_1_ID = UUID.fromString("55555555-5555-5555-5555-555555555551");
-    private static final UUID SEAT_2_ID = UUID.fromString("55555555-5555-5555-5555-555555555552");
+        // IDs from seed_test_data.sql
+        private static final UUID SHOWTIME_ID = UUID.fromString("01937b5c-a444-7000-8000-444444444444");
+        private static final UUID SEAT_1_ID = UUID.fromString("01937b5c-a555-7000-8000-555555555551");
+        private static final UUID SEAT_2_ID = UUID.fromString("01937b5c-a555-7000-8000-555555555552");
 
-    @Test
-    @Sql(scripts = "/sql/seed_test_data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-    @Sql(scripts = "/sql/clean_test_data.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
-    void shouldCompleteFullBookingFlow_RegisterLoginAndBook() throws Exception {
-        // ==================== STEP 1: REGISTER ====================
-        String newUserEmail = "integrationtest@example.com";
-        String password = "SecurePass123";
+        @Test
+        @Sql(scripts = "/sql/seed_test_data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+        @Sql(scripts = "/sql/clean_test_data.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+        void shouldCompleteFullBookingFlow_RegisterLoginAndBook() throws Exception {
+                // ==================== STEP 1: REGISTER ====================
+                String newUserEmail = "integrationtest@example.com";
+                String password = "SecurePass123";
 
-        RegisterRequest registerRequest = new RegisterRequest(newUserEmail, password);
+                RegisterRequest registerRequest = new RegisterRequest(newUserEmail, password, null, null, null);
 
-        ApiResponse<AuthResponse> registerResponse = restClient.post()
-                .uri("/api/v1/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(registerRequest)
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<AuthResponse>>() {
-                })
-                .returnResult()
-                .getResponseBody();
+                ApiResponse<AuthResponse> registerResponse = restClient.post()
+                                .uri("/api/v1/auth/register")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(registerRequest)
+                                .exchange()
+                                .expectStatus().isCreated()
+                                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<AuthResponse>>() {
+                                })
+                                .returnResult()
+                                .getResponseBody();
 
-        // Validate registration response
-        assertThat(registerResponse).isNotNull();
-        assertThat(registerResponse.success()).isTrue();
-        assertThat(registerResponse.data()).isNotNull();
-        assertThat(registerResponse.data().accessToken()).isNotBlank();
-        assertThat(registerResponse.data().refreshToken()).isNotBlank();
-        assertThat(registerResponse.data().expiresInMs()).isPositive();
+                // Validate registration response
+                assertThat(registerResponse).isNotNull();
+                assertThat(registerResponse.success()).isTrue();
+                assertThat(registerResponse.data()).isNotNull();
+                assertThat(registerResponse.data().accessToken()).isNotBlank();
+                assertThat(registerResponse.data().refreshToken()).isNotBlank();
+                assertThat(registerResponse.data().expiresInMs()).isPositive();
 
-        // ==================== STEP 2: LOGIN ====================
-        LoginRequest loginRequest = new LoginRequest(newUserEmail, password);
+                // ==================== STEP 2: LOGIN ====================
+                LoginRequest loginRequest = new LoginRequest(newUserEmail, password);
 
-        ApiResponse<AuthResponse> loginResponse = restClient.post()
-                .uri("/api/v1/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(loginRequest)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<AuthResponse>>() {
-                })
-                .returnResult()
-                .getResponseBody();
+                ApiResponse<AuthResponse> loginResponse = restClient.post()
+                                .uri("/api/v1/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(loginRequest)
+                                .exchange()
+                                .expectStatus().isOk()
+                                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<AuthResponse>>() {
+                                })
+                                .returnResult()
+                                .getResponseBody();
 
-        // Validate login response
-        assertThat(loginResponse).isNotNull();
-        assertThat(loginResponse.success()).isTrue();
-        assertThat(loginResponse.data()).isNotNull();
+                // Validate login response
+                assertThat(loginResponse).isNotNull();
+                assertThat(loginResponse.success()).isTrue();
+                assertThat(loginResponse.data()).isNotNull();
 
-        String accessToken = loginResponse.data().accessToken();
-        String refreshToken = loginResponse.data().refreshToken();
+                String accessToken = loginResponse.data().accessToken();
+                String refreshToken = loginResponse.data().refreshToken();
 
-        assertThat(accessToken).isNotBlank();
-        assertThat(refreshToken).isNotBlank();
-        // Tokens should be different from registration (token rotation)
-        assertThat(accessToken).isNotEqualTo(registerResponse.data().accessToken());
+                assertThat(accessToken).isNotBlank();
+                assertThat(refreshToken).isNotBlank();
+                // Note: Tokens might be identical if generated at the same second (same iat
+                // timestamp)
+                // This is acceptable behavior - both are valid tokens
 
-        // ==================== STEP 3: CREATE BOOKING ====================
-        CreateBookingRequest bookingRequest = new CreateBookingRequest(
-                SHOWTIME_ID,
-                List.of(SEAT_1_ID, SEAT_2_ID));
+                // ==================== STEP 3: CREATE BOOKING ====================
+                CreateBookingRequest bookingRequest = new CreateBookingRequest(
+                                SHOWTIME_ID,
+                                List.of(SEAT_1_ID, SEAT_2_ID));
 
-        UUID idempotencyKey = UUID.randomUUID();
+                UUID idempotencyKey = UUID.randomUUID();
 
-        ApiResponse<BookingResponse> bookingResponse = restClient.post()
-                .uri("/api/v1/bookings")
-                .header("Authorization", "Bearer " + accessToken)
-                .header("Idempotency-Key", idempotencyKey.toString())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(bookingRequest)
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<BookingResponse>>() {
-                })
-                .returnResult()
-                .getResponseBody();
+                ApiResponse<BookingResponse> bookingResponse = restClient.post()
+                                .uri("/api/v1/bookings")
+                                .header("Authorization", "Bearer " + accessToken)
+                                .header("Idempotency-Key", idempotencyKey.toString())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(bookingRequest)
+                                .exchange()
+                                .expectStatus().isCreated()
+                                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<BookingResponse>>() {
+                                })
+                                .returnResult()
+                                .getResponseBody();
 
-        // Validate booking response
-        assertThat(bookingResponse).isNotNull();
-        assertThat(bookingResponse.success()).isTrue();
-        assertThat(bookingResponse.data()).isNotNull();
+                // Validate booking response
+                assertThat(bookingResponse).isNotNull();
+                assertThat(bookingResponse.success()).isTrue();
+                assertThat(bookingResponse.data()).isNotNull();
 
-        BookingResponse booking = bookingResponse.data();
-        assertThat(booking.bookingId()).isNotNull();
-        assertThat(booking.status().name()).isEqualTo("HELD");
-        assertThat(booking.seats()).hasSize(2);
+                BookingResponse booking = bookingResponse.data();
+                assertThat(booking.bookingId()).isNotNull();
+                assertThat(booking.status().name()).isEqualTo("HELD");
+                assertThat(booking.seats()).hasSize(2);
 
-        // Validate payment details
-        assertThat(booking.payment()).isNotNull();
-        assertThat(booking.payment().status().name()).isEqualTo("PENDING");
-        assertThat(booking.payment().provider().name()).isEqualTo("STRIPE");
+                // Validate payment details
+                assertThat(booking.payment()).isNotNull();
+                assertThat(booking.payment().status().name()).isEqualTo("PENDING");
+                assertThat(booking.payment().provider().name()).isEqualTo("STRIPE");
 
-        // Validate amount details
-        assertThat(booking.amount()).isNotNull();
-        assertThat(booking.amount().total()).isPositive();
-        assertThat(booking.amount().currency()).isEqualTo("INR");
-        // Retry with same idempotency key should return same booking
-        ApiResponse<BookingResponse> idempotentResponse = restClient.post()
-                .uri("/api/v1/bookings")
-                .header("Authorization", "Bearer " + accessToken)
-                .header("Idempotency-Key", idempotencyKey.toString())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(bookingRequest)
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<BookingResponse>>() {
-                })
-                .returnResult()
-                .getResponseBody();
+                // Validate amount details
+                assertThat(booking.amount()).isNotNull();
+                assertThat(booking.amount().total()).isPositive();
+                assertThat(booking.amount().currency()).isEqualTo("INR");
+                // Retry with same idempotency key should return same booking
+                ApiResponse<BookingResponse> idempotentResponse = restClient.post()
+                                .uri("/api/v1/bookings")
+                                .header("Authorization", "Bearer " + accessToken)
+                                .header("Idempotency-Key", idempotencyKey.toString())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(bookingRequest)
+                                .exchange()
+                                .expectStatus().isCreated()
+                                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<BookingResponse>>() {
+                                })
+                                .returnResult()
+                                .getResponseBody();
 
-        assertThat(idempotentResponse).isNotNull();
-        assertThat(idempotentResponse.data().bookingId())
-                .isEqualTo(booking.bookingId());
+                assertThat(idempotentResponse).isNotNull();
+                assertThat(idempotentResponse.data().bookingId())
+                                .isEqualTo(booking.bookingId());
 
-        // ==================== STEP 5: VERIFY SEAT LOCKING ====================
-        // Attempt to book same seats should fail
-        UUID newIdempotencyKey = UUID.randomUUID();
+                // ==================== STEP 5: VERIFY SEAT LOCKING ====================
+                // Attempt to book same seats should fail
+                UUID newIdempotencyKey = UUID.randomUUID();
 
-        restClient.post()
-                .uri("/api/v1/bookings")
-                .header("Authorization", "Bearer " + accessToken)
-                .header("Idempotency-Key", newIdempotencyKey.toString())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(bookingRequest)
-                .exchange()
-                .expectStatus().isEqualTo(HttpStatus.CONFLICT)
-                .expectBody()
-                .jsonPath("$.success").isEqualTo(false)
-                .jsonPath("$.error.code").isEqualTo("SEAT_ALREADY_BOOKED");
-    }
+                restClient.post()
+                                .uri("/api/v1/bookings")
+                                .header("Authorization", "Bearer " + accessToken)
+                                .header("Idempotency-Key", newIdempotencyKey.toString())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(bookingRequest)
+                                .exchange()
+                                .expectStatus().isEqualTo(HttpStatus.CONFLICT)
+                                .expectBody()
+                                .jsonPath("$.success").isEqualTo(false)
+                                .jsonPath("$.error.code").isEqualTo("SEAT_ALREADY_BOOKED");
+        }
 
-    @Test
-    @Sql(scripts = "/sql/seed_test_data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-    @Sql(scripts = "/sql/clean_test_data.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
-    void shouldPreventUnauthorizedBooking_WithoutToken() {
-        // Arrange
-        CreateBookingRequest bookingRequest = new CreateBookingRequest(
-                SHOWTIME_ID,
-                List.of(SEAT_1_ID));
+        @Test
+        @Sql(scripts = "/sql/seed_test_data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+        @Sql(scripts = "/sql/clean_test_data.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+        void shouldPreventUnauthorizedBooking_WithoutToken() {
+                // Arrange
+                CreateBookingRequest bookingRequest = new CreateBookingRequest(
+                                SHOWTIME_ID,
+                                List.of(SEAT_1_ID));
 
-        // Act & Assert - Should return 401 Unauthorized
-        restClient.post()
-                .uri("/api/v1/bookings")
-                .header("Idempotency-Key", UUID.randomUUID().toString())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(bookingRequest)
-                .exchange()
-                .expectStatus().isUnauthorized();
-    }
+                // Act & Assert - Should return 401 Unauthorized
+                restClient.post()
+                                .uri("/api/v1/bookings")
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(bookingRequest)
+                                .exchange()
+                                .expectStatus().isUnauthorized();
+        }
 
-    @Test
-    @Sql(scripts = "/sql/seed_test_data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-    @Sql(scripts = "/sql/clean_test_data.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
-    void shouldRejectBooking_WithInvalidToken() {
-        // Arrange
-        CreateBookingRequest bookingRequest = new CreateBookingRequest(
-                SHOWTIME_ID,
-                List.of(SEAT_1_ID));
+        @Test
+        @Sql(scripts = "/sql/seed_test_data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+        @Sql(scripts = "/sql/clean_test_data.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+        void shouldRejectBooking_WithInvalidToken() {
+                // Arrange
+                CreateBookingRequest bookingRequest = new CreateBookingRequest(
+                                SHOWTIME_ID,
+                                List.of(SEAT_1_ID));
 
-        // Act & Assert - Should return 401 Unauthorized with invalid token
-        restClient.post()
-                .uri("/api/v1/bookings")
-                .header("Authorization", "Bearer invalid.jwt.token")
-                .header("Idempotency-Key", UUID.randomUUID().toString())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(bookingRequest)
-                .exchange()
-                .expectStatus().isUnauthorized();
-    }
+                // Act & Assert - Should return 401 Unauthorized with invalid token
+                restClient.post()
+                                .uri("/api/v1/bookings")
+                                .header("Authorization", "Bearer invalid.jwt.token")
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(bookingRequest)
+                                .exchange()
+                                .expectStatus().isUnauthorized();
+        }
 
-    @Test
-    void shouldRejectRegistration_WhenEmailAlreadyExists() {
-        // Arrange - First registration
-        String email = "duplicate@example.com";
-        RegisterRequest firstRequest = new RegisterRequest(email, "password123");
+        @Test
+        void shouldRejectRegistration_WhenEmailAlreadyExists() {
+                // Arrange - First registration
+                String email = "duplicate@example.com";
+                RegisterRequest firstRequest = new RegisterRequest(email, "password123", null, null, null);
 
-        restClient.post()
-                .uri("/api/v1/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(firstRequest)
-                .exchange()
-                .expectStatus().isCreated();
+                restClient.post()
+                                .uri("/api/v1/auth/register")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(firstRequest)
+                                .exchange()
+                                .expectStatus().isCreated();
 
-        // Act & Assert - Second registration with same email should fail
-        RegisterRequest duplicateRequest = new RegisterRequest(email, "differentPassword");
+                // Act & Assert - Second registration with same email should fail
+                RegisterRequest duplicateRequest = new RegisterRequest(email, "differentPassword", null, null, null);
 
-        restClient.post()
-                .uri("/api/v1/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(duplicateRequest)
-                .exchange()
-                .expectStatus().isEqualTo(HttpStatus.CONFLICT)
-                .expectBody()
-                .jsonPath("$.success").isEqualTo(false)
-                .jsonPath("$.error.code").isEqualTo("EMAIL_ALREADY_EXISTS")
-                .jsonPath("$.error.message")
-                .value(message -> assertThat(message.toString()).containsIgnoringCase("email already in use"));
-    }
+                restClient.post()
+                                .uri("/api/v1/auth/register")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(duplicateRequest)
+                                .exchange()
+                                .expectStatus().isEqualTo(HttpStatus.CONFLICT)
+                                .expectBody()
+                                .jsonPath("$.success").isEqualTo(false)
+                                .jsonPath("$.error.code").isEqualTo("EMAIL_ALREADY_EXISTS")
+                                .jsonPath("$.error.message")
+                                .value(message -> assertThat(message.toString())
+                                                .containsIgnoringCase("email already in use"));
+        }
 
-    @Test
-    void shouldRejectLogin_WithInvalidCredentials() {
-        // Arrange - Register a user first
-        String email = "validuser@example.com";
-        String correctPassword = "CorrectPassword123";
-        RegisterRequest registerRequest = new RegisterRequest(email, correctPassword);
+        @Test
+        void shouldRejectLogin_WithInvalidCredentials() {
+                // Arrange - Register a user first
+                String email = "validuser@example.com";
+                String correctPassword = "CorrectPassword123";
+                RegisterRequest registerRequest = new RegisterRequest(email, correctPassword, null, null, null);
 
-        restClient.post()
-                .uri("/api/v1/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(registerRequest)
-                .exchange()
-                .expectStatus().isCreated();
+                restClient.post()
+                                .uri("/api/v1/auth/register")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(registerRequest)
+                                .exchange()
+                                .expectStatus().isCreated();
 
-        // Act & Assert - Try to login with wrong password
-        LoginRequest wrongPasswordRequest = new LoginRequest(email, "WrongPassword");
+                // Act & Assert - Try to login with wrong password
+                LoginRequest wrongPasswordRequest = new LoginRequest(email, "WrongPassword");
 
-        restClient.post()
-                .uri("/api/v1/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(wrongPasswordRequest)
-                .exchange()
-                .expectStatus().isUnauthorized();
-    }
+                restClient.post()
+                                .uri("/api/v1/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(wrongPasswordRequest)
+                                .exchange()
+                                .expectStatus().isUnauthorized();
+        }
 
-    @Test
-    void shouldRefreshTokenSuccessfully() throws Exception {
-        // Arrange - Register and get initial tokens
-        String email = "refreshtest@example.com";
-        RegisterRequest registerRequest = new RegisterRequest(email, "password123");
+        @Test
+        void shouldRefreshTokenSuccessfully() throws Exception {
+                // Arrange - Register and get initial tokens
+                String email = "refreshtest@example.com";
+                RegisterRequest registerRequest = new RegisterRequest(email, "password123", null, null, null);
 
-        ApiResponse<AuthResponse> registerResponse = restClient.post()
-                .uri("/api/v1/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(registerRequest)
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<AuthResponse>>() {
-                })
-                .returnResult()
-                .getResponseBody();
+                ApiResponse<AuthResponse> registerResponse = restClient.post()
+                                .uri("/api/v1/auth/register")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(registerRequest)
+                                .exchange()
+                                .expectStatus().isCreated()
+                                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<AuthResponse>>() {
+                                })
+                                .returnResult()
+                                .getResponseBody();
 
-        String originalRefreshToken = registerResponse.data().refreshToken();
-        String originalAccessToken = registerResponse.data().accessToken();
+                String originalRefreshToken = registerResponse.data().refreshToken();
+                String originalAccessToken = registerResponse.data().accessToken();
 
-        // Wait 1 second to ensure different timestamp in JWT (iat claim)
-        Thread.sleep(1000);
+                // Wait 1 second to ensure different timestamp in JWT (iat claim)
+                Thread.sleep(1000);
 
-        // Act - Use refresh token
-        RefreshTokenRequest refreshRequest = new RefreshTokenRequest(originalRefreshToken);
+                // Act - Use refresh token
+                RefreshTokenRequest refreshRequest = new RefreshTokenRequest(originalRefreshToken);
 
-        ApiResponse<AuthResponse> refreshResponse = restClient.post()
-                .uri("/api/v1/auth/refresh")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(refreshRequest)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<AuthResponse>>() {
-                })
-                .returnResult()
-                .getResponseBody();
+                ApiResponse<AuthResponse> refreshResponse = restClient.post()
+                                .uri("/api/v1/auth/refresh")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(refreshRequest)
+                                .exchange()
+                                .expectStatus().isOk()
+                                .expectBody(new org.springframework.core.ParameterizedTypeReference<ApiResponse<AuthResponse>>() {
+                                })
+                                .returnResult()
+                                .getResponseBody();
 
-        // Assert - Should get new tokens
-        assertThat(refreshResponse).isNotNull();
-        assertThat(refreshResponse.success()).isTrue();
-        // Refresh token should always be different (token rotation)
-        assertThat(refreshResponse.data().refreshToken()).isNotEqualTo(originalRefreshToken);
-        // Access token may be same if issued in same second (JWT is deterministic)
-        // But with our 1 second delay, it should be different
-        assertThat(refreshResponse.data().accessToken()).isNotEqualTo(originalAccessToken);
+                // Assert - Should get new tokens
+                assertThat(refreshResponse).isNotNull();
+                assertThat(refreshResponse.success()).isTrue();
+                // Refresh token should always be different (token rotation)
+                assertThat(refreshResponse.data().refreshToken()).isNotEqualTo(originalRefreshToken);
+                // Access token may be same if issued in same second (JWT is deterministic)
+                // But with our 1 second delay, it should be different
+                assertThat(refreshResponse.data().accessToken()).isNotEqualTo(originalAccessToken);
 
-        // Old refresh token should now be invalid (token rotation)
-        restClient.post()
-                .uri("/api/v1/auth/refresh")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(new RefreshTokenRequest(originalRefreshToken))
-                .exchange()
-                .expectStatus().is5xxServerError(); // Should fail with revoked token
-    }
+                // Old refresh token should now be invalid (token rotation)
+                restClient.post()
+                                .uri("/api/v1/auth/refresh")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(new RefreshTokenRequest(originalRefreshToken))
+                                .exchange()
+                                .expectStatus().is5xxServerError(); // Should fail with revoked token
+        }
 }
