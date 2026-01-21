@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ticketledger.config.BookingProperties;
 import com.ticketledger.domain.entity.*;
@@ -29,11 +30,14 @@ import com.ticketledger.domain.repository.*;
 import com.ticketledger.dto.BookingResponse;
 import com.ticketledger.dto.CreateBookingRequest;
 import com.ticketledger.dto.PaymentWebhookRequest;
+import com.ticketledger.dto.RefundResponse;
 import com.ticketledger.exception.BusinessException;
 import com.ticketledger.exception.SeatAlreadyBookedException;
 import com.ticketledger.exception.ShowtimeNotFoundException;
+import com.ticketledger.service.AdminAuditLogService;
 import com.ticketledger.service.BookingService;
 import com.ticketledger.service.IdempotencyService;
+import com.ticketledger.service.gateway.PaymentGateway;
 import com.ticketledger.util.CryptoUtil;
 
 import lombok.RequiredArgsConstructor;
@@ -56,6 +60,10 @@ public class BookingServiceImpl implements BookingService {
         private final IdempotencyService idempotencyService;
         private final JsonMapper jsonMapper;
         private final ApplicationEventPublisher eventPublisher;
+
+        private final TransactionTemplate transactionTemplate;
+        private final PaymentGateway paymentGateway;
+        private final AdminAuditLogService adminAuditLogService;
 
         @Override
         @Transactional(isolation = Isolation.REPEATABLE_READ)
@@ -191,6 +199,92 @@ public class BookingServiceImpl implements BookingService {
                 idempotencyService.saveResponse(idempotencyKey, HttpStatus.CREATED.value(), requestJson);
                 return response;
         }
+
+        @Override
+        public RefundResponse processAdminRefund(UUID bookingId, String reason, UUID adminId,
+                        String idempotencyKey) {
+
+                // Helper record to pass data out of the transaction
+                record RefundContext(Payment payment, UUID logId) {
+                }
+
+                // STEP 1: Fast Transaction (Lock & Initiate)
+                RefundContext context = transactionTemplate.execute(status -> {
+                        Booking booking = bookingRepository.findByIdWithLock(bookingId)
+                                        .orElseThrow(() -> new BusinessException("Booking not found",
+                                                        "BOOKING_NOT_FOUND", HttpStatus.NOT_FOUND));
+
+                        if (booking.getStatus() != BookingStatus.CONFIRMED
+                                        && booking.getStatus() != BookingStatus.COMPLETED) {
+                                throw new BusinessException("Booking not in refundable state", "INVALID_REFUND_STATE",
+                                                HttpStatus.BAD_REQUEST);
+                        }
+
+                        booking.setStatus(BookingStatus.REFUND_INITIATED);
+                        bookingRepository.save(booking);
+
+                        var log = adminAuditLogService.createRefundLog(bookingId, adminId, reason, idempotencyKey);
+
+                        Payment payment = paymentRepository.findByBookingId(booking.getId())
+                                        .filter(p -> p.getStatus() == PaymentStatus.SUCCESS)
+                                        .orElseThrow(() -> new BusinessException(
+                                                        "No successful payment found to refund", "PAYMENT_NOT_FOUND",
+                                                        HttpStatus.BAD_REQUEST));
+
+                        return new RefundContext(payment, log.getId());
+                });
+
+                // STEP 2: Network Call (No Transaction)
+                RefundResponse refundResponse;
+                try {
+                        refundResponse = paymentGateway.refundPayment(
+                                        context.payment().getProviderTransactionId(),
+                                        context.payment().getAmount(),
+                                        idempotencyKey);
+                } catch (Exception e) {
+                        // Refund Failed at Provider -> Revert State check
+                        transactionTemplate.execute(status -> {
+                                Booking booking = bookingRepository.findByIdWithLock(bookingId).orElseThrow();
+                                booking.setStatus(BookingStatus.CONFIRMED); // Revert to Confirmed
+                                bookingRepository.save(booking);
+
+                                adminAuditLogService.failLog(context.logId(), e.getMessage());
+                                return null;
+                        });
+                        throw e;
+                }
+
+                // STEP 3: Finalize (Success Transaction)
+                transactionTemplate.execute(status -> {
+                        Booking booking = bookingRepository.findByIdWithLock(bookingId).orElseThrow();
+                        booking.setStatus(BookingStatus.REFUNDED);
+                        bookingRepository.save(booking);
+
+                        // Release Seats
+                        List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(bookingId);
+                        bookingSeats.forEach(bs -> {
+                                Seat seat = bs.getSeat();
+                                seat.setStatus(SeatStatus.AVAILABLE);
+                                seatRepository.save(seat);
+                        });
+
+                        // Update Audit Log
+                        adminAuditLogService.completeLog(context.logId(), refundResponse.providerRefundId());
+
+                        // Publish Event
+                        eventPublisher.publishEvent(new BookingRefundEvent(
+                                        booking.getId(),
+                                        booking.getUser().getEmail(),
+                                        refundResponse.amount(),
+                                        reason,
+                                        Instant.now()));
+                        return null;
+                });
+
+                return refundResponse;
+        }
+
+        // Helper method needed to avoid duplication if reused, but here it's fine.
 
         @Override
         @Transactional(propagation = Propagation.REQUIRES_NEW)
