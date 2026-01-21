@@ -880,21 +880,22 @@ LIMIT 1;
 
 **Purpose:** Immutable ledger of all administrative actions requiring accountability
 
-| Column             | Type           | Constraints                               | Description                                       |
-| ------------------ | -------------- | ----------------------------------------- | ------------------------------------------------- |
-| `id`               | `UUID`         | `PRIMARY KEY DEFAULT uuidv7()`            | UUIDv7 audit entry identifier                     |
-| `admin_user_id`    | `UUID`         | `REFERENCES users(id) ON DELETE RESTRICT` | Which admin performed the action                  |
-| `booking_id`       | `UUID`         | `REFERENCES bookings(id), NULL`           | Target booking (for refunds)                      |
-| `showtime_id`      | `UUID`         | `REFERENCES showtimes(id), NULL`          | Target showtime (for pauses)                      |
-| `theater_id`       | `UUID`         | `REFERENCES theaters(id), NULL`           | Target theater (for theater ops)                  |
-| `action`           | `VARCHAR(50)`  | `NOT NULL`                                | Action type (e.g., "REFUND", "PAUSE")             |
-| `status`           | `VARCHAR(20)`  | `NOT NULL`                                | Execution status (INITIATED, COMPLETED, FAILED)   |
-| `reason`           | `TEXT`         | `NOT NULL`                                | Mandatory justification for action                |
-| `idempotency_key`  | `VARCHAR(64)`  | `UNIQUE, NULL`                            | Prevents duplicate execution                      |
-| `stripe_refund_id` | `VARCHAR(100)` | `NULL`                                    | External Stripe refund ID (for reconciliation)    |
-| `completed_at`     | `TIMESTAMPTZ`  | `NULL`                                    | When action completed (NULL if still in progress) |
-| `created_at`       | `TIMESTAMPTZ`  | `DEFAULT NOW()`                           | Action initiated time                             |
-| `updated_at`       | `TIMESTAMPTZ`  | `DEFAULT NOW()`                           | Status last updated                               |
+| Column               | Type           | Constraints                               | Description                                              |
+| -------------------- | -------------- | ----------------------------------------- | -------------------------------------------------------- |
+| `id`                 | `UUID`         | `PRIMARY KEY DEFAULT uuidv7()`            | UUIDv7 audit entry identifier                            |
+| `admin_user_id`      | `UUID`         | `REFERENCES users(id) ON DELETE RESTRICT` | Which admin performed the action                         |
+| `booking_id`         | `UUID`         | `REFERENCES bookings(id), NULL`           | Target booking (for refunds)                             |
+| `showtime_id`        | `UUID`         | `REFERENCES showtimes(id), NULL`          | Target showtime (for pauses)                             |
+| `theater_id`         | `UUID`         | `REFERENCES theaters(id), NULL`           | Target theater (for theater ops)                         |
+| `action`             | `VARCHAR(50)`  | `NOT NULL`                                | Action type (e.g., "REFUND", "PAUSE")                    |
+| `status`             | `VARCHAR(20)`  | `NOT NULL`                                | Execution status (INITIATED, COMPLETED, FAILED)          |
+| `reason`             | `TEXT`         | `NOT NULL`                                | Mandatory justification for action                       |
+| `idempotency_key`    | `VARCHAR(64)`  | `UNIQUE, NULL`                            | Prevents duplicate execution                             |
+| `provider`           | `VARCHAR(50)`  | `NULL`                                    | Payment provider (STRIPE, PAYPAL) for payment actions    |
+| `provider_refund_id` | `VARCHAR(100)` | `NULL`                                    | External payment provider refund ID (for reconciliation) |
+| `completed_at`       | `TIMESTAMPTZ`  | `NULL`                                    | When action completed (NULL if still in progress)        |
+| `created_at`         | `TIMESTAMPTZ`  | `DEFAULT NOW()`                           | Action initiated time                                    |
+| `updated_at`         | `TIMESTAMPTZ`  | `DEFAULT NOW()`                           | Status last updated                                      |
 
 **Constraints:**
 ```sql

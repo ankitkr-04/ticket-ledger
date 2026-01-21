@@ -109,21 +109,22 @@ Many-to-many relationship between admins and theaters.
 
 Tracks all privileged admin operations for forensics and reconciliation.
 
-| Column             | Type      | Constraints          | Description                              |
-| ------------------ | --------- | -------------------- | ---------------------------------------- |
-| `id`               | UUID      | PK                   | Audit log identifier                     |
-| `booking_id`       | UUID      | FK → bookings, NULL  | Target booking (for refund operations)   |
-| `showtime_id`      | UUID      | FK → showtimes, NULL | Target showtime (for pause operations)   |
-| `theater_id`       | UUID      | FK → theaters, NULL  | Target theater (for scope validation)    |
-| `admin_user_id`    | UUID      | FK → users, NOT NULL | Admin who performed action               |
-| `action`           | VARCHAR   | NOT NULL             | Action type: REFUND, PAUSE, FORCE_EXPIRE |
-| `status`           | VARCHAR   | NOT NULL             | Status: INITIATED, COMPLETED, FAILED     |
-| `reason`           | TEXT      | NOT NULL             | Human-readable justification             |
-| `idempotency_key`  | VARCHAR   | UNIQUE, NOT NULL     | Prevents duplicate operations            |
-| `stripe_refund_id` | VARCHAR   | NULL                 | External payment gateway reference       |
-| `completed_at`     | TIMESTAMP | NULL                 | When action completed                    |
-| `created_at`       | TIMESTAMP | NOT NULL             | When action was initiated                |
-| `updated_at`       | TIMESTAMP | NOT NULL             | Last modification timestamp              |
+| Column               | Type      | Constraints          | Description                              |
+| -------------------- | --------- | -------------------- | ---------------------------------------- |
+| `id`                 | UUID      | PK                   | Audit log identifier                     |
+| `booking_id`         | UUID      | FK → bookings, NULL  | Target booking (for refund operations)   |
+| `showtime_id`        | UUID      | FK → showtimes, NULL | Target showtime (for pause operations)   |
+| `theater_id`         | UUID      | FK → theaters, NULL  | Target theater (for scope validation)    |
+| `admin_user_id`      | UUID      | FK → users, NOT NULL | Admin who performed action               |
+| `action`             | VARCHAR   | NOT NULL             | Action type: REFUND, PAUSE, FORCE_EXPIRE |
+| `status`             | VARCHAR   | NOT NULL             | Status: INITIATED, COMPLETED, FAILED     |
+| `reason`             | TEXT      | NOT NULL             | Human-readable justification             |
+| `idempotency_key`    | VARCHAR   | UNIQUE, NOT NULL     | Prevents duplicate operations            |
+| `provider`           | VARCHAR   | NULL                 | Payment provider (STRIPE, PAYPAL, etc.)  |
+| `provider_refund_id` | VARCHAR   | NULL                 | External payment gateway reference       |
+| `completed_at`       | TIMESTAMP | NULL                 | When action completed                    |
+| `created_at`         | TIMESTAMP | NOT NULL             | When action was initiated                |
+| `updated_at`         | TIMESTAMP | NOT NULL             | Last modification timestamp              |
 
 **Indexes:**
 - `idx_audit_booking` on `booking_id` (fast lookup during reconciliation)

@@ -40,7 +40,7 @@ public class Showtime extends SoftDeletableEntity {
     @Column(name = "start_time", nullable = false)
     private Instant startTime;
 
-    @Column(name = "end_time", insertable = false, updatable = false)
+    @Column(name = "end_time", nullable = false)
     private Instant endTime;
 
     @Enumerated(EnumType.STRING)

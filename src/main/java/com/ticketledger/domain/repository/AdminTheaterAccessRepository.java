@@ -19,24 +19,25 @@ import com.ticketledger.domain.entity.User;
 public interface AdminTheaterAccessRepository extends JpaRepository<AdminTheaterAccess, UUID> {
 
     /**
-     * Check if a user has access to a specific theater
+     * Check if a user has access to a specific theater (active only)
      */
-    boolean existsByUserIdAndTheaterId(UUID userId, UUID theaterId);
+    @Query("SELECT COUNT(ata) > 0 FROM AdminTheaterAccess ata WHERE ata.user.id = :userId AND ata.theater.id = :theaterId AND ata.revokedAt IS NULL")
+    boolean existsByUserIdAndTheaterId(@Param("userId") UUID userId, @Param("theaterId") UUID theaterId);
 
     /**
-     * Find all theaters accessible by a user
+     * Find all theaters accessible by a user (active access only)
      */
-    @Query("SELECT ata.theater FROM AdminTheaterAccess ata WHERE ata.user.id = :userId")
+    @Query("SELECT ata.theater FROM AdminTheaterAccess ata WHERE ata.user.id = :userId AND ata.revokedAt IS NULL")
     List<Theater> findTheatersByUserId(@Param("userId") UUID userId);
 
     /**
-     * Find all admins with access to a theater
+     * Find all admins with access to a theater (active access only)
      */
-    @Query("SELECT ata.user FROM AdminTheaterAccess ata WHERE ata.theater.id = :theaterId")
+    @Query("SELECT ata.user FROM AdminTheaterAccess ata WHERE ata.theater.id = :theaterId AND ata.revokedAt IS NULL")
     List<User> findAdminsByTheaterId(@Param("theaterId") UUID theaterId);
 
     /**
-     * Find access record by user and theater
+     * Find access record by user and theater (active or revoked)
      */
     @Query("SELECT ata FROM AdminTheaterAccess ata WHERE ata.user.id = :userId AND ata.theater.id = :theaterId")
     AdminTheaterAccess findByUserIdAndTheaterId(@Param("userId") UUID userId, @Param("theaterId") UUID theaterId);

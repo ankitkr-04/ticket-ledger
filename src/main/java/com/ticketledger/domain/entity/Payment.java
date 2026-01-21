@@ -34,10 +34,10 @@ public class Payment extends BaseEntity {
     private BigDecimal amount;
 
     @Column(length = 3)
-    private String currency = "INR";
+    private String currency = "USD";
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 50)
     private PaymentProvider provider;
 
     @Column(length = 50)
@@ -57,4 +57,11 @@ public class Payment extends BaseEntity {
 
     @Column(name = "provider_captured_at")
     private Instant providerCapturedAt;
+
+    @Column(name = "attempt_number", nullable = false)
+    private Integer attemptNumber = 1;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
 }

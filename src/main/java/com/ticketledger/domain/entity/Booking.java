@@ -47,4 +47,8 @@ public class Booking extends BaseEntity {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
 }

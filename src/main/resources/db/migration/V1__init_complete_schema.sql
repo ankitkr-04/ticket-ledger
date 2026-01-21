@@ -237,7 +237,10 @@ CREATE TABLE admin_audit_log (
     
     -- Safety
     idempotency_key VARCHAR(64) UNIQUE,
-    stripe_refund_id VARCHAR(100),
+    
+    -- Provider context (for payment-related actions)
+    provider VARCHAR(50),
+    provider_refund_id VARCHAR(100),
     
     -- Timestamps
     completed_at TIMESTAMPTZ,

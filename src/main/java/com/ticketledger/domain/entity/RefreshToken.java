@@ -15,11 +15,11 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 public class RefreshToken extends BaseEntity {
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 64)
     private String token;
 
     @Column(nullable = false)
-    private boolean revoked;
+    private boolean revoked = false;
 
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;

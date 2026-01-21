@@ -1,6 +1,8 @@
 package com.ticketledger.domain.entity;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+
+import org.hibernate.annotations.CreationTimestamp;
 
 import com.ticketledger.domain.base.BaseEntity;
 
@@ -28,12 +30,12 @@ public class AdminTheaterAccess extends BaseEntity {
     @JoinColumn(name = "theater_id", nullable = false)
     private Theater theater;
 
-    @Column(name = "granted_at", nullable = false)
-    @Builder.Default
-    private LocalDateTime grantedAt = LocalDateTime.now();
+    @CreationTimestamp
+    @Column(name = "granted_at", nullable = false, updatable = false)
+    private Instant grantedAt;
 
     @Column(name = "revoked_at")
-    private LocalDateTime revokedAt;
+    private Instant revokedAt;
 
     public boolean isActive() {
         return revokedAt == null;

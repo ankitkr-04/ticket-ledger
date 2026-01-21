@@ -5,6 +5,7 @@ import java.time.Instant;
 import com.ticketledger.domain.base.BaseEntity;
 import com.ticketledger.domain.enums.AdminLogAction;
 import com.ticketledger.domain.enums.AdminLogStatus;
+import com.ticketledger.domain.enums.PaymentProvider;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -53,11 +54,16 @@ public class AdminAuditLog extends BaseEntity {
     private String reason;
 
     // 🛡️ SAFETY
-    @Column(name = "idempotency_key", nullable = false, unique = true, length = 255)
+    @Column(name = "idempotency_key", length = 64)
     private String idempotencyKey;
 
-    @Column(name = "stripe_refund_id", length = 100)
-    private String stripeRefundId;
+    // 💳 PROVIDER CONTEXT (for payment-related actions)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "provider", length = 50)
+    private PaymentProvider provider;
+
+    @Column(name = "provider_refund_id", length = 100)
+    private String providerRefundId;
 
     // ⏱️ TIMESTAMPS
     @Column(name = "completed_at")
@@ -66,10 +72,11 @@ public class AdminAuditLog extends BaseEntity {
     /**
      * Mark the audit log as completed successfully
      */
-    public void markCompleted(String stripeRefundId) {
+    public void markCompleted(PaymentProvider provider, String providerRefundId) {
         this.status = AdminLogStatus.COMPLETED;
         this.completedAt = Instant.now();
-        this.stripeRefundId = stripeRefundId;
+        this.provider = provider;
+        this.providerRefundId = providerRefundId;
     }
 
     /**
