@@ -44,6 +44,10 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      */
     List<Booking> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
-    @Query("SELECT s.theater.id FROM Booking b JOIN b.showtime sh JOIN sh.screen s WHERE b.id = :id")
-    Optional<UUID> findTheaterIdById(@Param("id") UUID id);
+    @Query("SELECT b.showtime.screen.theater.id FROM Booking b WHERE b.id = :bookingId")
+    Optional<UUID> findTheaterIdById(@Param("bookingId") UUID bookingId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Booking b WHERE b.showtime.id = :showtimeId AND b.status = 'HELD'")
+    List<Booking> findHeldBookingsByShowtimeIdWithLock(UUID showtimeId);
 }

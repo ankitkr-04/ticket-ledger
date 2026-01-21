@@ -21,10 +21,11 @@ public interface AdminAuthorizationService {
      * Retrieves the current user ID from the SecurityContext.
      *
      * @param theaterId the target theater ID
+     * @return The UUID of the authorized Admin
      * @throws com.ticketledger.exception.TheaterAccessDeniedException if access is denied
      * @throws com.ticketledger.exception.ForbiddenException if user is not an admin
      */
-    void assertTheaterAccess(UUID theaterId);
+    UUID assertTheaterAccess(UUID theaterId);
 
     /**
      * Asserts that the currently authenticated user has access to the theater owning the screen.
@@ -32,9 +33,10 @@ public interface AdminAuthorizationService {
      * Retrieves the current user ID from the SecurityContext.
      *
      * @param screenId the target screen ID
+     * @return The UUID of the authorized Admin
      * @throws com.ticketledger.exception.TheaterAccessDeniedException if access is denied
      */
-    void assertScreenAccess(UUID screenId);
+    UUID assertScreenAccess(UUID screenId);
 
     /**
      * Asserts that the currently authenticated user has access to the theater owning the showtime.
@@ -43,9 +45,10 @@ public interface AdminAuthorizationService {
      * Retrieves the current user ID from the SecurityContext.
      *
      * @param showtimeId the target showtime ID
+     * @return The UUID of the authorized Admin
      * @throws com.ticketledger.exception.TheaterAccessDeniedException if access is denied
      */
-    void assertShowtimeAccess(UUID showtimeId);
+    UUID assertShowtimeAccess(UUID showtimeId);
 
     /**
      * Asserts that the currently authenticated user has access to the theater owning the booking.
@@ -54,7 +57,8 @@ public interface AdminAuthorizationService {
      * Retrieves the current user ID from the SecurityContext.
      *
      * @param bookingId the target booking ID
+     * @return The UUID of the authorized Admin
      * @throws com.ticketledger.exception.TheaterAccessDeniedException if access is denied
      */
-    void assertBookingAccess(UUID bookingId);
+    UUID assertBookingAccess(UUID bookingId);
 }

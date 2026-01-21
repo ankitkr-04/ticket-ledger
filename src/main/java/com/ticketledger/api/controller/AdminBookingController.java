@@ -52,17 +52,14 @@ public class AdminBookingController {
 
         log.info("Admin initiated refund for booking: {}", bookingId);
 
-        // 1. Gatekeeper: Assert Admin has access to this booking's theater
-        adminAuthorizationService.assertBookingAccess(bookingId);
+        // 1. Gatekeeper & Identity combined
+        UUID adminId = adminAuthorizationService.assertBookingAccess(bookingId);
 
-        // 2. Get Principal for Audit
-        AuthenticatedUser adminUser = SecurityUtil.getAuthenticatedUser();
-
-        // 3. Process Refund
+        // 2. Process Refund
         RefundResponse response = bookingService.processAdminRefund(
                 bookingId,
                 request.reason(),
-                adminUser.getId(),
+                adminId,
                 idempotencyKey);
 
         String requestId = tracer.currentSpan() != null ? tracer.currentSpan().context().traceId()

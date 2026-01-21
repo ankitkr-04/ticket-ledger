@@ -42,7 +42,7 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
 
     @Override
     @Transactional(readOnly = true)
-    public void assertTheaterAccess(UUID theaterId) {
+    public UUID assertTheaterAccess(UUID theaterId) {
         AuthenticatedUser user = SecurityUtil.getAuthenticatedUser();
 
         boolean hasAccess = adminTheaterAccessRepository.existsByUserIdAndTheaterId(user.getId(), theaterId);
@@ -50,32 +50,33 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
         if (!hasAccess) {
             throw new TheaterAccessDeniedException("Access denied to theater: " + theaterId);
         }
+        return user.getId();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public void assertScreenAccess(UUID screenId) {
+    public UUID assertScreenAccess(UUID screenId) {
         UUID theaterId = screenRepository.findTheaterIdById(screenId)
                 .orElseThrow(() -> new NotFoundException("Screen not found: " + screenId));
 
-        assertTheaterAccess(theaterId);
+        return assertTheaterAccess(theaterId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public void assertShowtimeAccess(UUID showtimeId) {
+    public UUID assertShowtimeAccess(UUID showtimeId) {
         UUID theaterId = showtimeRepository.findTheaterIdById(showtimeId)
                 .orElseThrow(() -> new ShowtimeNotFoundException(showtimeId));
 
-        assertTheaterAccess(theaterId);
+        return assertTheaterAccess(theaterId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public void assertBookingAccess(UUID bookingId) {
+    public UUID assertBookingAccess(UUID bookingId) {
         UUID theaterId = bookingRepository.findTheaterIdById(bookingId)
                 .orElseThrow(() -> new NotFoundException("Booking not found: " + bookingId));
 
-        assertTheaterAccess(theaterId);
+        return assertTheaterAccess(theaterId);
     }
 }

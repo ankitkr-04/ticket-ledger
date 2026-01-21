@@ -9,12 +9,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketledger.domain.entity.AdminAuditLog;
 import com.ticketledger.domain.entity.Booking;
+import com.ticketledger.domain.entity.Showtime;
 import com.ticketledger.domain.entity.User;
 import com.ticketledger.domain.enums.AdminLogAction;
 import com.ticketledger.domain.enums.AdminLogStatus;
 import com.ticketledger.domain.enums.PaymentProvider;
 import com.ticketledger.domain.repository.AdminAuditLogRepository;
 import com.ticketledger.domain.repository.BookingRepository;
+import com.ticketledger.domain.repository.ShowtimeRepository;
 import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.exception.NotFoundException;
 import com.ticketledger.service.AdminAuditLogService;
@@ -30,6 +32,7 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
     private final AdminAuditLogRepository adminAuditLogRepository;
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
+    private final ShowtimeRepository showtimeRepository;
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -77,5 +80,26 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
         logEntry.setReason(logEntry.getReason() + " | ERROR: " + errorReason);
 
         adminAuditLogRepository.save(logEntry);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public AdminAuditLog createShowtimeLog(UUID showtimeId, UUID adminId, AdminLogAction action, String reason,
+            String idempotencyKey) {
+        Showtime showtime = showtimeRepository.findById(showtimeId)
+                .orElseThrow(() -> new NotFoundException("Showtime not found: " + showtimeId));
+
+        User admin = userRepository.getReferenceById(adminId);
+
+        AdminAuditLog logEntry = new AdminAuditLog();
+        logEntry.setShowtime(showtime);
+        logEntry.setTheater(showtime.getScreen().getTheater());
+        logEntry.setAdminUser(admin);
+        logEntry.setAction(action);
+        logEntry.setStatus(AdminLogStatus.INITIATED);
+        logEntry.setReason(reason);
+        logEntry.setIdempotencyKey(idempotencyKey);
+
+        return adminAuditLogRepository.save(logEntry);
     }
 }

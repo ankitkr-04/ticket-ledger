@@ -11,4 +11,5 @@ public final class RouteConstant {
     public static final String AUTH_PATH = BASE_PATH + "/auth";
     public static final String WEBHOOK_PATH = BASE_PATH + "/webhooks";
     public static final String ADMIN_BOOKING_PATH = BASE_PATH + "/admin/bookings";
+    public static final String ADMIN_SHOWTIME_PATH = BASE_PATH + "/admin/showtimes";
 }
