@@ -54,11 +54,21 @@ public class ShowtimeServiceImpl implements ShowtimeService {
             throw new BusinessException("Showtime is already paused", "SHOWTIME_ALREADY_PAUSED", HttpStatus.CONFLICT);
         }
 
-        // 3. Update Status
+        // 3. SAFETY GUARD: Prevent pausing if sold tickets exist (Phantom Show
+        // Protection)
+        boolean hasSoldTickets = bookingRepository.hasConfirmedBookings(showtimeId);
+        if (hasSoldTickets) {
+            throw new BusinessException(
+                    "Cannot pause showtime with active sold tickets. Refund them first.",
+                    "SHOWTIME_HAS_SOLD_TICKETS",
+                    HttpStatus.CONFLICT);
+        }
+
+        // 4. Update Status
         showtime.setStatus(ShowtimeStatus.PAUSED);
         showtimeRepository.save(showtime);
 
-        // 4. Lock & Expire HELD bookings
+        // 5. Lock & Expire HELD bookings (The Kill Switch)
         List<Booking> heldBookings = bookingRepository.findHeldBookingsByShowtimeIdWithLock(showtimeId);
         AtomicInteger seatsReleased = new AtomicInteger(0);
 
@@ -76,7 +86,7 @@ public class ShowtimeServiceImpl implements ShowtimeService {
             });
         }
 
-        // 5. Audit Log
+        // 6. Audit Log
         adminAuditLogService.createShowtimeLog(
                 showtimeId,
                 adminId,

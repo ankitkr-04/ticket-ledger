@@ -335,6 +335,47 @@ admin_audit_log:
 
 ---
 
+## 🛠️ Implementation Guidelines
+
+### When to Use AdminAuditLog?
+
+Use `AdminAuditLogService` ONLY for operations that:
+
+1. **Mutate Financial State**: Refunds, Cancellations, Price changes.
+2. **Disrupt Availability**: Pausing showtimes, locking theaters, blocking seats.
+3. **Bypass Standard Rules**: Overrides, manual entry.
+
+**Do NOT use for:**
+
+- Read-only operations (Viewing reports).
+- Standard user flows (User booking a ticket).
+- System background tasks (Scheduled cleanup).
+
+### Developer Checklist
+
+Before implementing a new admin operation, verify:
+
+- [ ] Does this operation require a `PESSIMISTIC_WRITE` lock?
+- [ ] Is there an `Idempotency-Key` header in the API contract?
+- [ ] Is the `reason` field mandatory (user-facing explanation)?
+- [ ] Does success/failure need reconciliation (async external call)?
+
+### Examples
+
+**✅ REQUIRES Audit Log:**
+
+- Admin refunds booking → Financial mutation + External API call
+- Admin pauses showtime → Availability disruption + Expires HELD bookings
+- Admin overrides seat lock → Bypasses business rules
+
+**❌ DOES NOT Require Audit Log:**
+
+- Admin views booking list → Read-only query
+- Admin exports sales report → No state mutation
+- Cron job expires bookings → System automation (not privileged)
+
+---
+
 ## ⚡ Performance Considerations
 
 ### Does Locking Hurt Throughput?

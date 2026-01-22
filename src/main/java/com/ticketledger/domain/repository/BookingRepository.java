@@ -47,6 +47,13 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query("SELECT b.showtime.screen.theater.id FROM Booking b WHERE b.id = :bookingId")
     Optional<UUID> findTheaterIdById(@Param("bookingId") UUID bookingId);
 
+    /**
+     * Check if showtime has any confirmed or completed bookings (sold tickets).
+     * CRITICAL: Used to prevent pausing showtimes with active sold tickets.
+     */
+    @Query("SELECT COUNT(b) > 0 FROM Booking b WHERE b.showtime.id = :showtimeId AND b.status IN ('CONFIRMED', 'COMPLETED')")
+    boolean hasConfirmedBookings(@Param("showtimeId") UUID showtimeId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT b FROM Booking b WHERE b.showtime.id = :showtimeId AND b.status = 'HELD'")
     List<Booking> findHeldBookingsByShowtimeIdWithLock(UUID showtimeId);
