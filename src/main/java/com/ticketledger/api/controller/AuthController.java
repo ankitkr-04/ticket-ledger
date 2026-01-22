@@ -17,7 +17,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping(path = RouteConstant.AUTH_PATH, version = RouteConstant.API_VERSION_V1)
+@RequestMapping(RouteConstant.AUTH_PATH)
 @RequiredArgsConstructor
 public class AuthController {
 

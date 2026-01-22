@@ -5,13 +5,20 @@ spring:
   application:
     name: TicketLedger
   
-  mvc:
-    apiversion:
-      use:
-        path-segment: 1
-      required: true
-      default: "v1"
-      
+  # mvc:
+  #   servlet:
+  #     path: "/api"
+  #   log-request-details: true
+  #   apiversion:
+  #     supported:
+  #     - "v1"
+  #     use:
+  #       path-segment: 2   # Index 2 for version in URL: /api/v1/auth/register
+  #     required: true
+     
+  #     detect-supported: true  # Auto-detect versions from @RequestMapping annotations
+
+
       
   
   main:

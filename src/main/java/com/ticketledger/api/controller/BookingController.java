@@ -18,8 +18,8 @@ import com.ticketledger.service.BookingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
-@RestController()
-@RequestMapping(name = RouteConstant.BOOKING_PATH, version = RouteConstant.API_VERSION_V1)
+@RestController
+@RequestMapping(RouteConstant.BOOKING_PATH)
 @RequiredArgsConstructor
 public class BookingController {
 

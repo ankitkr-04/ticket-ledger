@@ -21,7 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
-@RequestMapping(path = RouteConstant.ADMIN_SHOWTIME_PATH, version = RouteConstant.API_VERSION_V1)
+@RequestMapping(RouteConstant.ADMIN_SHOWTIME_PATH)
 @RequiredArgsConstructor
 @Slf4j
 public class AdminShowtimeController {
