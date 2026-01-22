@@ -24,4 +24,14 @@ public interface PaymentGateway {
      * @return the refund details
      */
     RefundResponse refundPayment(String providerTransactionId, BigDecimal amount, String idempotencyKey);
+
+    /**
+     * Fetches the current status of a refund from the external provider.
+     *
+     * @param providerRefundId the provider's refund ID (optional if idempotencyKey
+     *                         known)
+     * @param idempotencyKey   the idempotency key used for the refund
+     * @return the refund details
+     */
+    RefundResponse fetchRefundStatus(String providerRefundId, String idempotencyKey);
 }

@@ -20,11 +20,20 @@ public interface EmailService {
     void sendBookingConfirmation(UUID bookingId, String userEmail, BigDecimal amount);
 
     /**
-     * Sends refund notification email to user.
+     * Sends refunds notification email to user.
      * 
      * @param bookingId the booking identifier
      * @param userEmail recipient email address
      * @param amount    refund amount
      */
     void sendRefundNotification(UUID bookingId, String userEmail, BigDecimal amount);
+
+    /**
+     * Sends an admin alert email.
+     *
+     * @param recipientEmail the recipient email address
+     * @param subject        the email subject
+     * @param message        the email body
+     */
+    void sendAdminAlert(String recipientEmail, String subject, String message);
 }

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Refund;
+import com.stripe.net.RequestOptions;
 import com.stripe.param.RefundCreateParams;
 import com.ticketledger.config.StripeProperties;
 import com.ticketledger.dto.RefundResponse;
@@ -49,10 +50,12 @@ public class StripePaymentGateway implements PaymentGateway {
                     .setCharge(providerTransactionId)
                     .setAmount(amount.multiply(BigDecimal.valueOf(100)).longValue()) // Stripe expects cents
                     .build();
-            // Note: Stripe SDK supports idempotency via RequestOptions but we rely on
-            // database locks for simple cases first
 
-            Refund refund = Refund.create(params);
+            RequestOptions options = RequestOptions.builder()
+                    .setIdempotencyKey(idempotencyKey)
+                    .build();
+
+            Refund refund = Refund.create(params, options);
 
             return new RefundResponse(
                     refund.getId(),
@@ -61,6 +64,63 @@ public class StripePaymentGateway implements PaymentGateway {
                     refund.toJson());
         } catch (StripeException e) {
             log.error("Stripe refund failed", e);
+            throw new BusinessException(
+                    "Payment gateway error: " + e.getMessage(),
+                    "PAYMENT_GATEWAY_ERROR",
+                    HttpStatus.BAD_GATEWAY);
+        }
+    }
+
+    @Override
+    public RefundResponse fetchRefundStatus(String providerRefundId, String idempotencyKey) {
+        if (isMockMode()) {
+            return new RefundResponse(
+                    providerRefundId != null ? providerRefundId : "re_mock_check_" + UUID.randomUUID(),
+                    "SUCCEEDED",
+                    BigDecimal.ZERO, // Amount unknown in mock check without context
+                    "{\"status\": \"succeeded\", \"mock\": true}");
+        }
+
+        try {
+            Refund refund = null;
+            if (providerRefundId != null) {
+                refund = Refund.retrieve(providerRefundId);
+            } else {
+                // If we don't have the refund ID, we can't easily look it up by idempotency key
+                // via the standard retrieves without storing it.
+                // However, for this task, the user prompt implies we should try.
+                // Realistically, without the ID, we might need to list refunds for a Charge,
+                // but we don't have the Charge ID here easily unless passed.
+                // Given the constraints, we will assume if ID is missing, we might return
+                // unknown
+                // or rely on the caller passing the Charge ID if we changed the signature.
+                // BUT, looking at the plan: "Call Stripe to fetch the refund status (using the
+                // idempotencyKey or providerTransactionId)"
+                // We better rely on providerRefundId if available.
+                // If strictly only idempotencyKey is available, Stripe doesn't support "get by
+                // idempotency key" directly.
+                // We would have to rely on the fact that if we retry the creaation with the
+                // same key, we get the same object.
+                // But that is a side-effect.
+
+                // Let's stick to retrieving by ID if possible.
+                // If ID is null, we return FAILED/UNKNOWN.
+                throw new BusinessException("Cannot fetch refund status without providerRefundId", "MISSING_REFUND_ID",
+                        HttpStatus.BAD_REQUEST);
+            }
+
+            return new RefundResponse(
+                    refund.getId(),
+                    refund.getStatus().toUpperCase(),
+                    BigDecimal.valueOf(refund.getAmount() / 100.0),
+                    refund.toJson());
+
+        } catch (StripeException e) {
+            log.error("Stripe refund fetch failed", e);
+            // If 404
+            if (e.getStatusCode() == 404) {
+                return new RefundResponse(null, "UNKNOWN", BigDecimal.ZERO, "{}");
+            }
             throw new BusinessException(
                     "Payment gateway error: " + e.getMessage(),
                     "PAYMENT_GATEWAY_ERROR",

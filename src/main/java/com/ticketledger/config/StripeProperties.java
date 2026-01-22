@@ -8,5 +8,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "ticketledger.payment.stripe")
 public record StripeProperties(
-    String secretKey
+    String secretKey,
+    String adminAlertEmail
 ) {}

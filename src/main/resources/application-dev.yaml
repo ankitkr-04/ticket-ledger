@@ -64,3 +64,4 @@ ticketledger:
   payment:
     stripe:
       secret-key: mock_stripe_secret_key_for_dev_environment
+      admin-alert-email: ${ADMIN_ALERT_EMAIL:admin@ticketledger.local}

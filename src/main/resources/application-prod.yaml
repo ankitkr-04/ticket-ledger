@@ -45,3 +45,9 @@ booking:
   lock-duration-minutes: 15
   default-base-price: 10.00
   currency: INR
+
+ticketledger:
+  payment:
+    stripe:
+      secret-key: ${STRIPE_SECRET_KEY}
+      admin-alert-email: ${ADMIN_ALERT_EMAIL}

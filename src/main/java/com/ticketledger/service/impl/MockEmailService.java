@@ -47,4 +47,9 @@ public class MockEmailService implements EmailService {
             log.error("❌ [Mock Email] Interrupted while sending refund email", e);
         }
     }
+
+    @Override
+    public void sendAdminAlert(String recipientEmail, String subject, String message) {
+        log.error("🚨 [ADMIN ALERT] To: {}, Subject: {}, Body: {}", recipientEmail, subject, message);
+    }
 }
