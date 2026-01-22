@@ -17,7 +17,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping(RouteConstant.AUTH_PATH)
+@RequestMapping(path = RouteConstant.AUTH_PATH, version = RouteConstant.API_VERSION_V1)
 @RequiredArgsConstructor
 public class AuthController {
 
@@ -56,7 +56,7 @@ public class AuthController {
      * session.
      * Requires Authorization header with valid JWT.
      */
-    @PostMapping("/logout")
+    @PostMapping(path = "/logout")
     public ResponseEntity<ApiResponse<Void>> logout(@AuthenticationPrincipal AuthenticatedUser currentUser) {
         authService.logout(currentUser.getUsername());
         return ResponseEntity.noContent().build();

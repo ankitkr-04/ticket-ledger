@@ -5,6 +5,15 @@ spring:
   application:
     name: TicketLedger
   
+  mvc:
+    apiversion:
+      use:
+        path-segment: 1
+      required: true
+      default: "v1"
+      
+      
+  
   main:
     banner-mode: "off"
 

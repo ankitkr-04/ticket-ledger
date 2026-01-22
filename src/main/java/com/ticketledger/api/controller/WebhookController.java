@@ -13,7 +13,7 @@ import com.ticketledger.service.BookingService;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping(RouteConstant.WEBHOOK_PATH)
+@RequestMapping(path = RouteConstant.WEBHOOK_PATH, version = RouteConstant.API_VERSION_V1)
 @RequiredArgsConstructor
 public class WebhookController {
     private final BookingService bookingService;
