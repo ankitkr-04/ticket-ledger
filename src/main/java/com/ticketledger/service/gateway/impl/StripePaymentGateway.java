@@ -14,6 +14,7 @@ import com.stripe.param.RefundCreateParams;
 import com.ticketledger.config.StripeProperties;
 import com.ticketledger.dto.RefundResponse;
 import com.ticketledger.exception.BusinessException;
+import com.ticketledger.exception.PermanentGatewayException;
 import com.ticketledger.service.gateway.PaymentGateway;
 
 import jakarta.annotation.PostConstruct;
@@ -64,6 +65,31 @@ public class StripePaymentGateway implements PaymentGateway {
                     refund.toJson());
         } catch (StripeException e) {
             log.error("Stripe refund failed", e);
+
+            Integer statusCode = e.getStatusCode();
+            String stripeCode = e.getStripeError() != null ? e.getStripeError().getCode() : null;
+
+            // Already-refunded is idempotent success from our domain perspective.
+            if ("charge_already_refunded".equals(stripeCode)) {
+                log.info("Stripe charge already refunded for txn={}, treating as successful", providerTransactionId);
+                return new RefundResponse(
+                        "already_refunded_" + providerTransactionId,
+                        "SUCCEEDED",
+                        amount,
+                        "{\"status\":\"succeeded\",\"reason\":\"charge_already_refunded\"}");
+            }
+
+            if (statusCode != null && statusCode >= 400 && statusCode < 500) {
+                HttpStatus httpStatus = HttpStatus.resolve(statusCode);
+                if (httpStatus == null) {
+                    httpStatus = HttpStatus.BAD_REQUEST;
+                }
+                throw new PermanentGatewayException(
+                        "Permanent payment gateway error: " + e.getMessage(),
+                        "PAYMENT_GATEWAY_PERMANENT_ERROR",
+                        httpStatus);
+            }
+
             throw new BusinessException(
                     "Payment gateway error: " + e.getMessage(),
                     "PAYMENT_GATEWAY_ERROR",

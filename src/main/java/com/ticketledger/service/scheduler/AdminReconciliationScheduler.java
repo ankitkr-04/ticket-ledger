@@ -3,6 +3,7 @@ package com.ticketledger.service.scheduler;
 import java.time.Instant;
 import java.util.List;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -10,10 +11,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketledger.config.StripeProperties;
 import com.ticketledger.domain.entity.*;
+import com.ticketledger.domain.event.BookingRefundEvent;
+import com.ticketledger.domain.enums.AdminLogStatus;
 import com.ticketledger.domain.enums.BookingStatus;
 import com.ticketledger.domain.enums.SeatStatus;
 import com.ticketledger.domain.repository.*;
 import com.ticketledger.dto.RefundResponse;
+import com.ticketledger.exception.PermanentGatewayException;
+import com.ticketledger.exception.TicketLedgerException;
 import com.ticketledger.service.EmailService;
 import com.ticketledger.service.gateway.PaymentGateway;
 
@@ -46,6 +51,7 @@ public class AdminReconciliationScheduler {
     private final SeatRepository seatRepository;
     private final PaymentGateway paymentGateway;
     private final EmailService emailService;
+    private final ApplicationEventPublisher eventPublisher;
     private final StripeProperties stripeProperties;
 
     @Scheduled(fixedDelay = 60000)
@@ -131,6 +137,29 @@ public class AdminReconciliationScheduler {
                             "Booking ID: " + booking.getId() + "\n" +
                             "Refund ID: " + response.providerRefundId());
 
+        } catch (PermanentGatewayException e) {
+            log.error("Error reconciling log ID: {}", auditLog.getId(), e);
+
+            bookingRepository.findByIdWithLock(auditLog.getBooking().getId())
+                    .ifPresent(booking -> markAsPermanentFailure(
+                            auditLog, booking, "Permanent reconciliation failure: " + e.getMessage()));
+
+            alertAdmin(auditLog, "Refund Reconciliation Permanently Failed",
+                    "Manual intervention required.\n" +
+                            "Audit Log ID: " + auditLog.getId() + "\n" +
+                            "Booking ID: " + auditLog.getBooking().getId() + "\n" +
+                            "Error: " + e.getMessage());
+        } catch (TicketLedgerException e) {
+            log.error("Error reconciling log ID: {}", auditLog.getId(), e);
+
+            bookingRepository.findByIdWithLock(auditLog.getBooking().getId())
+                    .ifPresent(booking -> markAsFailed(auditLog, booking, "Reconciliation failed: " + e.getMessage()));
+
+            alertAdmin(auditLog, "Refund Reconciliation FAILED",
+                    "Manual intervention required.\n" +
+                            "Audit Log ID: " + auditLog.getId() + "\n" +
+                            "Booking ID: " + auditLog.getBooking().getId() + "\n" +
+                            "Error: " + e.getMessage());
         } catch (Exception e) {
             log.error("Error reconciling log ID: " + auditLog.getId(), e);
 
@@ -152,6 +181,8 @@ public class AdminReconciliationScheduler {
      * This mirrors STEP 3 in BookingServiceImpl.processAdminRefund.
      */
     private void completeRefund(AdminAuditLog auditLog, Booking booking, RefundResponse response) {
+        String originalReason = auditLog.getReason();
+
         // 1. Update Booking to REFUNDED
         booking.setStatus(BookingStatus.REFUNDED);
         bookingRepository.save(booking);
@@ -168,6 +199,14 @@ public class AdminReconciliationScheduler {
         auditLog.markCompleted(auditLog.getProvider(), response.providerRefundId());
         auditLog.setReason("Reconciled by Scheduler: " + response.status());
         adminAuditLogRepository.save(auditLog);
+
+        // 4. Publish refund event so user notification flow is triggered.
+        eventPublisher.publishEvent(new BookingRefundEvent(
+                booking.getId(),
+                booking.getUser().getEmail(),
+                response.amount(),
+                originalReason != null ? originalReason : "Auto-reconciled by scheduler",
+                Instant.now()));
 
         log.info("🎫 Released {} seats for booking {}", bookingSeats.size(), booking.getId());
     }
@@ -186,6 +225,23 @@ public class AdminReconciliationScheduler {
         adminAuditLogRepository.save(auditLog);
 
         log.warn("⚠️ Reverted booking {} to CONFIRMED after reconciliation failure", booking.getId());
+    }
+
+    /**
+     * Mark refund as permanently failed and move booking to REFUND_FAILED for
+     * manual intervention.
+     */
+    private void markAsPermanentFailure(AdminAuditLog auditLog, Booking booking, String reason) {
+        booking.setStatus(BookingStatus.REFUND_FAILED);
+        bookingRepository.save(booking);
+
+        auditLog.setStatus(AdminLogStatus.PERMANENT_FAILURE);
+        auditLog.setCompletedAt(Instant.now());
+        auditLog.setReason(auditLog.getReason() + " | ERROR: " + reason);
+        adminAuditLogRepository.save(auditLog);
+
+        log.warn("⚠️ Marked audit log {} as PERMANENT_FAILURE and moved booking {} to REFUND_FAILED",
+                auditLog.getId(), booking.getId());
     }
 
     private void alertAdmin(AdminAuditLog auditLog, String subject, String body) {

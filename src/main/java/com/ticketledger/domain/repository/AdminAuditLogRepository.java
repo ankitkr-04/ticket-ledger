@@ -18,6 +18,6 @@ public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, UU
      * Returns Optional to support one-at-a-time processing without holding
      * connection.
      */
-    @Query(value = "SELECT * FROM admin_audit_log WHERE status = 'INITIATED' AND created_at < :threshold ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED", nativeQuery = true)
+    @Query(value = "SELECT * FROM admin_audit_log WHERE status = 'INITIATED' AND completed_at IS NULL AND created_at < :threshold ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED", nativeQuery = true)
     Optional<AdminAuditLog> findNextStuckJobWithLock(Instant threshold);
 }

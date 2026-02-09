@@ -3,5 +3,6 @@ package com.ticketledger.domain.enums;
 public enum AdminLogStatus {
     INITIATED,
     COMPLETED,
-    FAILED
+    FAILED,
+    PERMANENT_FAILURE
 }

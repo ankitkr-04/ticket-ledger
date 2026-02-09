@@ -33,6 +33,18 @@ This documentation follows a **Design-First narrative**. Read in numerical order
    - Machine-readable error codes
    - **Security:** Strict rules for `error.context` field (no PII, no stack traces)
 
+7. **[007_admin_workflows.md](architecture/007_admin_workflows.md)** - The "Operations"
+   - Admin operational flows
+   - Reconciliation and intervention paths
+
+8. **[008_admin_api_contracts.md](architecture/008_admin_api_contracts.md)** - The "Admin Interface"
+   - Admin API specifications
+   - Privileged action contracts
+
+9. **[009_admin_failure_modes.md](architecture/009_admin_failure_modes.md)** - The "Recovery Contract"
+   - Canonical refund failure/recovery outcomes
+   - Terminal vs retryable admin reconciliation states
+
 ---
 
 ## 🧠 Design Decisions

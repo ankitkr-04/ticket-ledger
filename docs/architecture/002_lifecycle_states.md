@@ -37,6 +37,7 @@ This document defines the **allowed and denied state transitions** for all entit
 | `EXPIRED`          | Hold duration exceeded, booking invalidated                            |
 | `CANCELLED`        | User-initiated cancellation (pre-refund or within cancellation window) |
 | `REFUND_INITIATED` | Admin refund in progress, row locked, awaiting Stripe response         |
+| `REFUND_FAILED`    | Terminal refund failure; manual intervention required                   |
 | `REFUNDED`         | Funds returned to user, financial ledger settled                       |
 | `COMPLETED`        | Showtime passed, booking lifecycle ended                               |
 | `REFUND_REQUIRED`  | Payment succeeded but booking integrity violated                       |
@@ -88,7 +89,8 @@ Result: Consistent state ✅
 
 **Recovery:** If admin process crashes during `REFUND_INITIATED`, reconciliation job detects orphaned state and either:
 - Completes refund (if Stripe succeeded)
-- Rolls back to CONFIRMED (if Stripe failed)
+- Moves to `REFUND_FAILED` + `PERMANENT_FAILURE` (if gateway returns non-retryable `4xx`)
+- Marks retryable failure for re-processing (for timeout/`5xx`/network paths)
 ### 💳 Payment States
 
 | State      | Description                                      |
@@ -183,6 +185,7 @@ graph TD
     C -->|user cancellation| CA[CANCELLED]
     C -->|admin refund| RI[REFUND_INITIATED]
     RI -->|stripe success| RF[REFUNDED]
+    RI -->|permanent gateway failure| RFF[REFUND_FAILED]
     C -->|showtime passed| CO[COMPLETED]
     CO -->|admin refund| RI
     E -->|late payment| RR[REFUND_REQUIRED]
@@ -194,6 +197,7 @@ graph TD
     style CA fill:#FF6B6B
     style RI fill:#FFA500
     style RF fill:#808080
+    style RFF fill:#808080
     style CO fill:#808080
     style RR fill:#FFA500
 ```
@@ -205,6 +209,7 @@ graph TD
 | `CONFIRMED`        | `CANCELLED`        | User cancels confirmed booking         |
 | `CONFIRMED`        | `REFUND_INITIATED` | Admin initiates refund (locks row)     |
 | `REFUND_INITIATED` | `REFUNDED`         | Stripe refund succeeds                 |
+| `REFUND_INITIATED` | `REFUND_FAILED`    | Permanent gateway failure (`4xx`)      |
 | `CONFIRMED`        | `COMPLETED`        | Showtime has passed                    |
 | `COMPLETED`        | `REFUND_INITIATED` | Admin initiates refund (post-showtime) |
 | `EXPIRED`          | `REFUND_REQUIRED`  | Late payment after hold expiry         |
@@ -222,6 +227,7 @@ graph TD
 | `EXPIRED`          | `REFUNDED`                      | ⚠️ Cannot refund expired booking                                   |
 | `REFUND_INITIATED` | `CONFIRMED`                     | ⚠️ Cannot rollback initiated refund                                |
 | `REFUNDED`         | `ANY`                           | ⚠️ Terminal state - refund completed                               |
+| `REFUND_FAILED`    | `ANY`                           | ⚠️ Terminal state - manual intervention required                   |
 | `COMPLETED`        | `ANY (except REFUND_INITIATED)` | ⚠️ Can only refund after completion                                |
 | `REFUND_REQUIRED`  | `CONFIRMED`                     | ⚠️ Refund is irreversible                                          |
 

@@ -11,5 +11,6 @@ public enum BookingStatus {
     COMPLETED,
     REFUND_REQUIRED,
     REFUND_INITIATED,
+    REFUND_FAILED,
     REFUNDED
 }
