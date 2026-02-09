@@ -1,6 +1,5 @@
 package com.ticketledger.security;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,8 +20,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.servlet.HandlerExceptionResolver;
 
+import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.config.CorsProperties;
 import com.ticketledger.config.JwtProperties;
 
@@ -39,9 +38,7 @@ public class SecurityConfig {
     private final UserDetailsService userDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CorsProperties corsProperties;
-
-    @Qualifier("handlerExceptionResolver")
-    private final HandlerExceptionResolver resolver;
+    private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -50,14 +47,17 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                .exceptionHandling(ex -> ex.authenticationEntryPoint(
-                        (request, response, authException) -> resolver.resolveException(request, response, null,
-                                authException)))
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(restAuthenticationEntryPoint))
 
                 .authorizeHttpRequests(auth -> auth
-                        // .requestMatchers("/v1/auth/**", "/swagger-ui/**",
-                        // "/v3/api-docs/**").permitAll()
-                        .anyRequest().permitAll())
+                        .requestMatchers(
+                                RouteConstant.AUTH_PATH + "/login",
+                                RouteConstant.AUTH_PATH + "/register",
+                                RouteConstant.AUTH_PATH + "/refresh",
+                                RouteConstant.WEBHOOK_PATH + "/**",
+                                "/actuator/health")
+                        .permitAll()
+                        .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

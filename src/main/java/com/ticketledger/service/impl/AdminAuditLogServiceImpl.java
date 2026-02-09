@@ -96,7 +96,9 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
         logEntry.setTheater(showtime.getScreen().getTheater());
         logEntry.setAdminUser(admin);
         logEntry.setAction(action);
-        logEntry.setStatus(AdminLogStatus.INITIATED);
+        // Showtime pause/resume is synchronous; log should be finalized immediately.
+        logEntry.setStatus(AdminLogStatus.COMPLETED);
+        logEntry.setCompletedAt(Instant.now());
         logEntry.setReason(reason);
         logEntry.setIdempotencyKey(idempotencyKey);
 
