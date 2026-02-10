@@ -50,6 +50,10 @@ This documentation follows a **Design-First narrative**. Read in numerical order
    - Late payment reclamation ("original payer wins")
    - Non-transactional notification strategy
 
+11. **[011_metrics_catalog.md](architecture/011_metrics_catalog.md)** - The "Observability Contract"
+   - Business metrics emitted by core services
+   - Tags, alerting, and SLO targets
+
 ---
 
 ## 🧠 Design Decisions
@@ -110,7 +114,7 @@ Deep dives into architectural choices and trade-offs:
 - **Stability (Phase 2):** See [010_booking_failure_recovery.md](architecture/010_booking_failure_recovery.md), Flow D in [003_sequence_flows.md](architecture/003_sequence_flows.md#flow-d-reliable-cleanup--reclamation-phase-2), and [007_reclamation_and_lock_strategy.md](decisions/007_reclamation_and_lock_strategy.md)
 - **Virtual Threads:** See [003_concurrency_model.md](decisions/003_concurrency_model.md)
 - **Async Events:** See [004_event_driven_notifications.md](decisions/004_event_driven_notifications.md)
-- **Observability:** See [005_observability_strategy.md](decisions/005_observability_strategy.md)
+- **Observability:** See [005_observability_strategy.md](decisions/005_observability_strategy.md) and [011_metrics_catalog.md](architecture/011_metrics_catalog.md)
 - **State Machines:** See [002_lifecycle_states.md](architecture/002_lifecycle_states.md)
 - **Database Design:** See "Architecture Note" in [004_database_schema.md](architecture/004_database_schema.md#seat_status)
 - **Authentication:** See [001_authentication_strategy.md](decisions/001_authentication_strategy.md)

@@ -12,7 +12,7 @@ This document explains the **observability strategy** for TicketLedger, focusing
 - Trade-offs: JSON logs vs readability
 
 ### ❌ This file does NOT contain:
-- Metrics/APM tooling (see separate monitoring docs)
+- Metrics/APM tooling (see [011_metrics_catalog.md](../architecture/011_metrics_catalog.md))
 - Log aggregation infrastructure (ELK/Splunk setup)
 - Alerting rules (see runbooks)
 

@@ -186,8 +186,9 @@ class BookingFlowIntegrationTest {
                                 .jsonPath("$.success").isEqualTo(false)
                                 .jsonPath("$.error.code").isEqualTo("SEAT_ALREADY_BOOKED");
 
-                assertMetricCount("business.booking.attempt", "success", "none", 1);
+                assertMetricCount("business.booking.attempt", "success", "none", 2);
                 assertMetricLatency("business.booking.attempt.latency", "success");
+                assertMetricCount("business.booking.attempt", "failure", "SEAT_ALREADY_BOOKED", 1);
         }
 
         @Test
