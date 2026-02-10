@@ -8,10 +8,12 @@ import org.springframework.stereotype.Service;
 
 import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
+import com.stripe.model.PaymentIntent;
 import com.stripe.model.Refund;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.RefundCreateParams;
 import com.ticketledger.config.StripeProperties;
+import com.ticketledger.domain.enums.PaymentStatus;
 import com.ticketledger.dto.RefundResponse;
 import com.ticketledger.exception.BusinessException;
 import com.ticketledger.exception.PermanentGatewayException;
@@ -94,6 +96,55 @@ public class StripePaymentGateway implements PaymentGateway {
                     "Payment gateway error: " + e.getMessage(),
                     "PAYMENT_GATEWAY_ERROR",
                     HttpStatus.BAD_GATEWAY);
+        }
+    }
+
+    @Override
+    public PaymentStatus verifyPaymentStatus(String providerTransactionId) throws PermanentGatewayException {
+        if (isMockMode()) {
+            log.info("Simulating Stripe payment status check for txn: {}", providerTransactionId);
+            return PaymentStatus.SUCCESS;
+        }
+
+        if (providerTransactionId == null || providerTransactionId.isBlank()) {
+            throw new PermanentGatewayException("Provider Transaction ID is missing", "INVALID_PROVIDER_ID",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        try {
+            PaymentIntent intent = PaymentIntent.retrieve(providerTransactionId);
+            String status = intent.getStatus();
+            log.info("Stripe payment status for txn {}: {}", providerTransactionId, status);
+
+            return switch (status) {
+                case "succeeded" -> PaymentStatus.SUCCESS;
+                // These mean the user failed or gave up. Scheduler should EXPIRE the hold.
+                case "requires_payment_method", "canceled" -> PaymentStatus.FAILED;
+                // These mean the payment is still "in flight". Scheduler should WAIT.
+                case "requires_action", "processing" -> PaymentStatus.PENDING;
+                default -> PaymentStatus.PENDING;
+            };
+
+        } catch (StripeException e) {
+            log.error("Stripe payment status check failed for txn {}", providerTransactionId, e);
+
+            // If Stripe explicitly says the ID doesn't exist, we can't confirm success.
+            // We treat this as FAILED so the Reaper can reclaim the seat.
+            if ("resource_missing".equals(e.getStripeError() != null ? e.getStripeError().getCode() : null)) {
+                log.warn("Stripe transaction {} not found. Marking as FAILED for cleanup.", providerTransactionId);
+                return PaymentStatus.FAILED;
+            }
+
+            if (e.getStatusCode() != null && e.getStatusCode() >= 400 && e.getStatusCode() < 500) {
+                throw new PermanentGatewayException(
+                        "Permanent gateway error: " + e.getMessage(),
+                        "PAYMENT_GATEWAY_PERMANENT_ERROR",
+                        HttpStatus.valueOf(e.getStatusCode()));
+            }
+
+            // For 5xx or timeouts, return PENDING so we don't accidentally expire a booking
+            // that might actually be successful but Stripe is just down.
+            return PaymentStatus.PENDING;
         }
     }
 

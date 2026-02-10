@@ -11,7 +11,15 @@ import com.ticketledger.domain.base.BaseEntity;
 import com.ticketledger.domain.enums.PaymentProvider;
 import com.ticketledger.domain.enums.PaymentStatus;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -50,6 +58,9 @@ public class Payment extends BaseEntity {
 
     @Column(name = "provider_transaction_id", length = 255)
     private String providerTransactionId;
+
+    @Column(name = "provider_refund_id")
+    private String providerRefundId;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "provider_response", columnDefinition = "jsonb")

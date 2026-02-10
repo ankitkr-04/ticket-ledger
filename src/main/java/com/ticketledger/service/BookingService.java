@@ -15,4 +15,6 @@ public interface BookingService {
     void expireBooking(UUID bookingId);
 
     RefundResponse processAdminRefund(UUID bookingId, String reason, UUID adminId, String idempotencyKey);
+
+    void reclaimSeatForLatePayment(UUID bookingId);
 }

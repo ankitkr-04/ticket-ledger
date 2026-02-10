@@ -2,6 +2,7 @@ package com.ticketledger.service.gateway;
 
 import java.math.BigDecimal;
 
+import com.ticketledger.domain.enums.PaymentStatus;
 import com.ticketledger.dto.RefundResponse;
 
 /**
@@ -34,4 +35,6 @@ public interface PaymentGateway {
      * @return the refund details
      */
     RefundResponse fetchRefundStatus(String providerRefundId, String idempotencyKey);
+
+    PaymentStatus verifyPaymentStatus(String providerTransactionId);
 }

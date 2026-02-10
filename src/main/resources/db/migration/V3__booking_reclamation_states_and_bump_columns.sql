@@ -16,13 +16,19 @@ ALTER TABLE bookings
     ADD COLUMN IF NOT EXISTS bumped_by_booking_id UUID REFERENCES bookings(id),
     ADD COLUMN IF NOT EXISTS system_cancellation_reason TEXT;
 
--- 3) Operational clarity comments
+--3) Add refund id to payments for better tracking of refund transactions
+ALTER TABLE payments
+    ADD COLUMN IF NOT EXISTS provider_refund_id VARCHAR(255);
+COMMENT ON COLUMN payments.provider_refund_id IS
+    'Identifier returned by payment gateway for refund transactions';
+
+-- 4) Operational clarity comments
 COMMENT ON COLUMN bookings.bumped_by_booking_id IS
     'Refers to the original User 1 booking that displaced this User 2 booking';
 COMMENT ON COLUMN bookings.system_cancellation_reason IS
     'System-provided reason when booking is force-cancelled for reliability/integrity recovery';
 
--- 4) Insert a system user for internal operations (if not already present)
+-- 5) Insert a system user for internal operations (if not already present)
 INSERT INTO users (id, email, password_hash, role, full_name, is_verified)
 VALUES (
     '00000000-0000-0000-0000-000000000000', 

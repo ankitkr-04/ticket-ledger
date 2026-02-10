@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.ticketledger.domain.entity.Payment;
+import com.ticketledger.domain.enums.PaymentStatus;
 
 import jakarta.persistence.LockModeType;
 
@@ -24,5 +25,12 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     Optional<Payment> findByIdWithLock(@Param("id") UUID id);
 
     Optional<Payment> findByBookingId(UUID bookingId);
+
+    @Query("SELECT p FROM Payment p WHERE p.booking.id = :bookingId ORDER BY p.createdAt DESC")
+    Optional<Payment> findFirstByBookingIdOrderByCreatedAtDesc(@Param("bookingId") UUID bookingId);
+
+    @Query("SELECT p FROM Payment p WHERE p.booking.id = :bookingId AND p.status = :status")
+    Optional<Payment> findFirstByBookingIdAndStatus(@Param("bookingId") UUID bookingId,
+            @Param("status") PaymentStatus status);
 
 }
