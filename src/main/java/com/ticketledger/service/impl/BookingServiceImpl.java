@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -87,7 +88,23 @@ public class BookingServiceImpl implements BookingService {
                 Booking user1Booking = bookingRepository.findByIdWithLock(lateBookingId)
                                 .orElseThrow(() -> new NotFoundException("Booking Not Found: " + lateBookingId));
 
-                List<Booking> conflictingBookings = bookingSeatRepository.findConfirmedBookingsBySeatIds(seatIds);
+                // Retry safety: if already finalized by a previous run, do nothing.
+                if (user1Booking.getStatus() == BookingStatus.CONFIRMED) {
+                        return;
+                }
+
+                // The repository query can return duplicate bookings (one row per conflicting
+                // seat).
+                // De-duplicate by booking id and exclude the late booking itself.
+                List<Booking> conflictingBookings = new ArrayList<>(
+                                bookingSeatRepository.findConfirmedBookingsBySeatIds(seatIds).stream()
+                                                .filter(conflict -> !conflict.getId().equals(user1Booking.getId()))
+                                                .collect(
+                                                                LinkedHashMap<UUID, Booking>::new,
+                                                                (map, booking) -> map.putIfAbsent(booking.getId(),
+                                                                                booking),
+                                                                Map::putAll)
+                                                .values());
 
                 if (conflictingBookings.isEmpty()) {
                         processCleanReclaim(user1Booking, lockedSeats);

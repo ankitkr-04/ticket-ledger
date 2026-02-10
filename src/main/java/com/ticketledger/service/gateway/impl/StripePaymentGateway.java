@@ -116,14 +116,7 @@ public class StripePaymentGateway implements PaymentGateway {
             String status = intent.getStatus();
             log.info("Stripe payment status for txn {}: {}", providerTransactionId, status);
 
-            return switch (status) {
-                case "succeeded" -> PaymentStatus.SUCCESS;
-                // These mean the user failed or gave up. Scheduler should EXPIRE the hold.
-                case "requires_payment_method", "canceled" -> PaymentStatus.FAILED;
-                // These mean the payment is still "in flight". Scheduler should WAIT.
-                case "requires_action", "processing" -> PaymentStatus.PENDING;
-                default -> PaymentStatus.PENDING;
-            };
+            return mapPaymentIntentStatus(status);
 
         } catch (StripeException e) {
             log.error("Stripe payment status check failed for txn {}", providerTransactionId, e);
@@ -208,5 +201,16 @@ public class StripePaymentGateway implements PaymentGateway {
     private boolean isMockMode() {
         String key = stripeProperties.secretKey();
         return key == null || "mock".equalsIgnoreCase(key) || "test".equalsIgnoreCase(key);
+    }
+
+    static PaymentStatus mapPaymentIntentStatus(String status) {
+        return switch (status) {
+            case "succeeded" -> PaymentStatus.SUCCESS;
+            // These mean the user failed or gave up. Scheduler should EXPIRE the hold.
+            case "requires_payment_method", "canceled" -> PaymentStatus.FAILED;
+            // These mean the payment is still "in flight". Scheduler should WAIT.
+            case "requires_action", "processing" -> PaymentStatus.PENDING;
+            default -> PaymentStatus.PENDING;
+        };
     }
 }

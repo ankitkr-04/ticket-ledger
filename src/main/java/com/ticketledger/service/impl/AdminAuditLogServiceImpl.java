@@ -18,6 +18,7 @@ import com.ticketledger.domain.enums.PaymentProvider;
 import com.ticketledger.domain.repository.AdminAuditLogRepository;
 import com.ticketledger.domain.repository.BookingRepository;
 import com.ticketledger.domain.repository.ShowtimeRepository;
+import com.ticketledger.domain.repository.TheaterRepository;
 import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.exception.NotFoundException;
 import com.ticketledger.service.AdminAuditLogService;
@@ -34,6 +35,7 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
     private final ShowtimeRepository showtimeRepository;
+    private final TheaterRepository theaterRepository;
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -50,8 +52,10 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
         AdminAuditLog logEntry = new AdminAuditLog();
         logEntry.setBooking(booking);
 
-        // Automatically link to the theater for reporting/scoping
-        logEntry.setTheater(booking.getShowtime().getScreen().getTheater());
+        // Resolve theater id via query to avoid lazy graph traversal in async contexts.
+        UUID theaterId = bookingRepository.findTheaterIdById(bookingId)
+                .orElseThrow(() -> new NotFoundException("Theater not found for booking: " + bookingId));
+        logEntry.setTheater(theaterRepository.getReferenceById(theaterId));
 
         logEntry.setAdminUser(admin);
         logEntry.setAction(action);

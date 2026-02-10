@@ -1,5 +1,6 @@
 package com.ticketledger.domain.listener;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import org.springframework.scheduling.annotation.Async;
@@ -34,6 +35,13 @@ public class BookingRefundListener {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleRefundEvent(BookingRefundEvent event) {
+        // Only reclamation bump events should trigger automatic gateway refunds.
+        // Other refund events are already reconciled elsewhere and are notification-only.
+        if (event.amount() == null || event.amount().compareTo(BigDecimal.ZERO) != 0) {
+            log.debug("Skipping automatic listener refund for booking {} (amount={})", event.bookingId(), event.amount());
+            return;
+        }
+
         log.info("Processing async refund for bumped booking: {}", event.bookingId());
 
         try {
