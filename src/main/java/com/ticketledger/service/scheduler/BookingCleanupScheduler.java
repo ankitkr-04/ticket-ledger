@@ -12,7 +12,7 @@ import com.ticketledger.domain.enums.BookingStatus;
 import com.ticketledger.domain.enums.PaymentStatus;
 import com.ticketledger.domain.repository.BookingRepository;
 import com.ticketledger.domain.repository.PaymentRepository;
-import com.ticketledger.service.BookingService;
+import com.ticketledger.service.booking.BookingService;
 import com.ticketledger.service.gateway.PaymentGateway;
 
 import lombok.RequiredArgsConstructor;

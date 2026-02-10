@@ -13,7 +13,8 @@ import com.ticketledger.dto.ApiResponse;
 import com.ticketledger.dto.BookingResponse;
 import com.ticketledger.dto.CreateBookingRequest;
 import com.ticketledger.security.AuthenticatedUser;
-import com.ticketledger.service.BookingService;
+import com.ticketledger.service.booking.BookingService;
+import com.ticketledger.service.context.RequestContext;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 public class BookingController {
 
     private final BookingService bookingService;
+    private final RequestContext requestContext;
 
     @PostMapping
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(
@@ -33,10 +35,8 @@ public class BookingController {
 
         BookingResponse booking = bookingService.createBooking(request, currentUser.getId(), idempotencyKey);
 
-        String requestId = UUID.randomUUID().toString();
-
         return new ResponseEntity<>(
-                ApiResponse.success(booking, requestId),
+                ApiResponse.success(booking, requestContext.getRequestId()),
                 HttpStatus.CREATED);
     }
 }

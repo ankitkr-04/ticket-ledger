@@ -2,7 +2,6 @@ package com.ticketledger.security;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 
 import org.springframework.http.MediaType;
 import org.springframework.security.core.AuthenticationException;
@@ -10,6 +9,7 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
 
 import com.ticketledger.dto.ApiResponse;
+import com.ticketledger.service.context.RequestContext;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,6 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
     private final JsonMapper jsonMapper;
+    private final RequestContext requestContext;
 
     @Override
     public void commence(
@@ -35,7 +36,7 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         ApiResponse<Void> error = ApiResponse.error(
                 "UNAUTHORIZED",
                 authException.getMessage(),
-                UUID.randomUUID().toString(),
+                requestContext.getRequestId(),
                 null);
 
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

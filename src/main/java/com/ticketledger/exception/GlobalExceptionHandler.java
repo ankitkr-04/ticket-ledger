@@ -2,7 +2,6 @@ package com.ticketledger.exception;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -18,13 +17,18 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import com.ticketledger.dto.ApiResponse;
+import com.ticketledger.service.context.RequestContext;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
+
+    private final RequestContext requestContext;
 
     // 1. Handle Domain Exceptions (Business Logic)
     @ExceptionHandler(TicketLedgerException.class)
@@ -60,15 +64,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(AuthenticationException ex) {
-        // Generate a Request ID for tracking (or extract from MDC/Request if available)
-        String requestId = UUID.randomUUID().toString();
-
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.error(
                         "UNAUTHORIZED", // Code
                         ex.getMessage(), // Message (e.g., "Full authentication is required...")
-                        requestId, // Request ID
+                        requestContext.getRequestId(), // Request ID
                         null // Context (optional)
                 ));
     }
@@ -106,19 +107,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             Map<String, Object> context,
             Object requestSource) { // Accepts HttpServletRequest or WebRequest
 
-        // Try to get the Trace ID from the request attribute (Standard in Spring Boot
-        // 3+)
-        // Or fallback to a new UUID if tracing is disabled.
-        String requestId = getRequestId(requestSource);
+        String requestId = requestContext.getRequestId();
 
         ApiResponse<Object> response = ApiResponse.error(code, message, requestId, context);
 
         return new ResponseEntity<>(response, status);
-    }
-
-    private String getRequestId(Object requestSource) {
-        // Logic to extract correlation ID from MDC or Request Attributes
-        // For now, generating a UUID is acceptable if Observability isn't set up yet
-        return UUID.randomUUID().toString();
     }
 }

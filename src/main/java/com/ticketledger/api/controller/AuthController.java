@@ -12,6 +12,7 @@ import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.dto.*;
 import com.ticketledger.security.AuthenticatedUser;
 import com.ticketledger.service.AuthService;
+import com.ticketledger.service.context.RequestContext;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,13 +23,14 @@ import lombok.RequiredArgsConstructor;
 public class AuthController {
 
     private final AuthService authService;
+    private final RequestContext requestContext;
 
     /**
      * Authenticates a user and returns an Access Token + Refresh Token.
      */
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(authService.login(request), "Login successful"));
+        return ResponseEntity.ok(ApiResponse.success(authService.login(request), requestContext.getRequestId()));
     }
 
     /**
@@ -39,7 +41,7 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body(ApiResponse.success(authService.register(request), "Registration successful"));
+                .body(ApiResponse.success(authService.register(request), requestContext.getRequestId()));
     }
 
     /**
@@ -48,7 +50,7 @@ public class AuthController {
      */
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(authService.refresh(request), "Token refreshed successfully"));
+        return ResponseEntity.ok(ApiResponse.success(authService.refresh(request), requestContext.getRequestId()));
     }
 
     /**

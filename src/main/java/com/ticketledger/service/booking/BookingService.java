@@ -1,4 +1,4 @@
-package com.ticketledger.service;
+package com.ticketledger.service.booking;
 
 import java.util.UUID;
 

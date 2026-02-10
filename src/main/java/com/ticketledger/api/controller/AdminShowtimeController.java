@@ -15,6 +15,7 @@ import com.ticketledger.dto.UpdateShowtimeStatusRequest;
 import com.ticketledger.exception.BusinessException;
 import com.ticketledger.service.AdminAuthorizationService;
 import com.ticketledger.service.ShowtimeService;
+import com.ticketledger.service.context.RequestContext;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class AdminShowtimeController {
 
     private final ShowtimeService showtimeService;
     private final AdminAuthorizationService adminAuthorizationService;
+    private final RequestContext requestContext;
 
     /**
      * Pause a showtime and expire all held bookings.
@@ -65,7 +67,6 @@ public class AdminShowtimeController {
                 adminId,
                 idempotencyKey);
 
-        String requestId = UUID.randomUUID().toString();
-        return ResponseEntity.ok(ApiResponse.success(response, requestId));
+        return ResponseEntity.ok(ApiResponse.success(response, requestContext.getRequestId()));
     }
 }

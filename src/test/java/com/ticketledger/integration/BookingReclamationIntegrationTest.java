@@ -50,7 +50,7 @@ import com.ticketledger.domain.repository.SeatRepository;
 import com.ticketledger.domain.repository.ShowtimeRepository;
 import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.dto.RefundResponse;
-import com.ticketledger.service.BookingService;
+import com.ticketledger.service.booking.BookingService;
 import com.ticketledger.service.gateway.PaymentGateway;
 import com.ticketledger.service.scheduler.BookingCleanupScheduler;
 

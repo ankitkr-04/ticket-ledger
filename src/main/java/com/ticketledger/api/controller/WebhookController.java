@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.dto.PaymentWebhookRequest;
-import com.ticketledger.service.BookingService;
+import com.ticketledger.service.booking.BookingService;
 
 import lombok.RequiredArgsConstructor;
 
