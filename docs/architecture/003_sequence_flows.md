@@ -263,11 +263,11 @@ sequenceDiagram
 
 ---
 
-### Flow C: User Redirect (The Sync)
+### Flow C: User Redirect (DB-Only Status)
 
 **Trigger:** User lands on `/booking-status?bookingId={id}`
 
-**Purpose:** Force synchronization with payment gateway when webhook may be delayed
+**Purpose:** Provide a stable user-facing status without calling Stripe from read paths
 
 **Sequence:**
 
@@ -277,19 +277,14 @@ sequenceDiagram
     participant Frontend
     participant API
     participant DB
-    participant PaymentGateway
 
     User->>Frontend: Redirect from Payment Page
     Frontend->>API: GET /bookings/{id}/status
     API->>DB: SELECT booking, payment
     
     alt Payment == PENDING (Ambiguous State)
-        API->>PaymentGateway: GET /payments/{paymentId}/status
-        PaymentGateway-->>API: {status: SUCCESS/FAILED}
-        API->>DB: BEGIN TRANSACTION
-        API->>API: Apply Flow B Logic
-        API->>DB: COMMIT
-        API-->>Frontend: Updated Status
+        API->>API: Enqueue reconcile request (async)
+        API-->>Frontend: Current Status (PENDING)
     else Payment == SUCCESS/FAILED (Definitive)
         API-->>Frontend: Current Status
     end
@@ -300,11 +295,10 @@ sequenceDiagram
 **Polling Strategy:**
 - Frontend polls every 2 seconds for up to 30 seconds
 - After 30 seconds, show "Payment Processing" message
-- Backend forces gateway fetch only once per booking
+- Backend never blocks on Stripe for read endpoints (stability requirement)
 
 **Transaction Boundary:**
-- Same as Flow B if update required
-- Read-only if status is already definitive
+- Read-only (no gateway calls). State convergence is achieved via webhook processing (Flow B) and background reconciliation (Flow D).
 
 **Outcome:**
 - ✅ **Sync Success:** User sees updated status immediately
@@ -313,57 +307,116 @@ sequenceDiagram
 
 ---
 
-### Flow D: The Reaper (Background Cleanup)
+### Flow D: Reliable Cleanup & Reclamation (Phase 2)
 
 **Trigger:** Cron Job (Every 1 minute)
 
-**Purpose:** Clean up expired holds and free seats
+**Purpose:** Clean up expired holds, reconcile uncertain payments, and perform deterministic reclamation (“original payer wins”) without impacting read availability
 
 **Sequence:**
 
 ```mermaid
 sequenceDiagram
-    participant Cron
+    participant Cron as BookingCleanupScheduler
     participant DB
+    participant Stripe
+    participant RefundTask
     
-    Cron->>DB: SELECT bookings WHERE status=HELD AND locked_until < now()
+    Cron->>DB: SELECT candidate HELD bookings (SKIP LOCKED)
     
-    loop For Each Expired Booking
-        Cron->>DB: BEGIN TRANSACTION
-        Cron->>DB: SELECT booking, seats FOR UPDATE
-        Cron->>DB: UPDATE booking → EXPIRED
-        Cron->>DB: UPDATE seats → AVAILABLE
-        Cron->>DB: UPDATE payment → FAILED (if still PENDING)
-        Cron->>DB: COMMIT
+    loop For each candidate booking
+        Cron->>DB: SELECT latest payment (read-only)
+
+        alt provider_transaction_id is NULL (Fast Path)
+            Cron->>DB: BEGIN TRANSACTION
+            Cron->>DB: SELECT booking + seats FOR UPDATE
+            Cron->>DB: UPDATE booking → EXPIRED
+            Cron->>DB: UPDATE seats → AVAILABLE
+            Cron->>DB: UPDATE payment → FAILED (if still PENDING)
+            Cron->>DB: COMMIT
+        else provider_transaction_id exists
+            Cron->>Stripe: Verify payment status by provider_transaction_id
+            Stripe-->>Cron: SUCCEEDED / FAILED / PENDING
+
+            alt Stripe == PENDING
+                Cron->>Cron: No-op (recheck next run)
+            else Stripe == FAILED
+                Cron->>DB: BEGIN TRANSACTION
+                Cron->>DB: SELECT booking + seats FOR UPDATE
+                Cron->>DB: UPDATE booking → EXPIRED
+                Cron->>DB: UPDATE seats → AVAILABLE
+                Cron->>DB: UPDATE payment → FAILED (if still PENDING)
+                Cron->>DB: COMMIT
+            else Stripe == SUCCEEDED (Late Success)
+                Note over Cron,DB: Critical Section (Atomic Seat Swap)
+                Cron->>DB: BEGIN TRANSACTION
+                Cron->>DB: SELECT seat FOR UPDATE (PESSIMISTIC_WRITE)
+                Cron->>DB: SELECT booking1 FOR UPDATE
+                Cron->>DB: SELECT booking2 (if seat owned) FOR UPDATE
+
+                alt Seat AVAILABLE (No Conflict)
+                    Cron->>DB: UPDATE booking1 → CONFIRMED
+                    Cron->>DB: UPDATE seats → SOLD
+                    Cron->>DB: UPDATE payment1 → SUCCESS
+                else Seat owned by booking2 (Conflict / Bump)
+                    Cron->>DB: UPDATE booking2 → SYSTEM_CANCELLED
+                    Cron->>DB: INSERT AdminAuditLog (AUTO_RECLAMATION_CONFLICT)
+                    Cron->>DB: UPDATE booking1 → CONFIRMED
+                    Cron->>DB: UPDATE seats → SOLD (owner becomes booking1)
+                    Cron->>DB: UPDATE payment1 → SUCCESS
+                end
+                Cron->>DB: COMMIT
+
+                opt AFTER COMMIT (Side Effect Boundary)
+                    Cron->>RefundTask: Enqueue Stripe.refund(User2) (async)
+                end
+            end
+        end
     end
     
-    Cron->>Cron: Log cleanup metrics
+    RefundTask->>Stripe: POST /refunds (User2 payment)
+    Stripe-->>RefundTask: refund ok / error
+    alt refund ok
+        RefundTask->>DB: UPDATE payment2 → REFUNDED (and store refund id/status)
+    else refund error
+        RefundTask->>DB: UPDATE booking2 → REFUND_REQUIRED_MANUAL
+        RefundTask->>DB: INSERT AdminAuditLog (AUTO_RECLAMATION_REFUND_FAILED)
+    end
+
+    Cron->>Cron: Log cleanup/reconciliation metrics
 ```
 
 **Transaction Boundary:**
 - **Batch Size:** 100 bookings per run
-- **Per Booking:**
+- **Selection:** only includes bookings beyond threshold + **30s safety buffer**
+- **Critical Section (Late Success):**
   - `BEGIN TRANSACTION`
-  - `SELECT ... FOR UPDATE` on booking and related seats
-  - `UPDATE bookings SET status = EXPIRED`
-  - `UPDATE seats SET status = AVAILABLE`
-  - `UPDATE payments SET status = FAILED` (if `PENDING`)
+  - `SELECT ... FOR UPDATE` on **seat** (first), then `booking1`, then `booking2` (stable order)
+  - `UPDATE booking2 → SYSTEM_CANCELLED` (conflict case)
+  - `INSERT admin_audit_log` inside the transaction (no “ghost swaps”)
+  - `UPDATE booking1 → CONFIRMED` + `UPDATE seats → SOLD`
   - `COMMIT`
+- **Async Side Effects:** Refund is executed **after commit** and updates DB status on completion/failure
 
 **Query:**
 ```sql
-SELECT id, seat_ids 
-FROM bookings 
-WHERE status = 'HELD' 
-  AND locked_until < NOW()
+SELECT id
+FROM bookings
+WHERE status = 'HELD'
+  AND (
+    (created_at < NOW() - INTERVAL '2 minutes 30 seconds')
+    OR (locked_until < NOW() - INTERVAL '30 seconds')
+  )
 LIMIT 100
 FOR UPDATE SKIP LOCKED;
 ```
 
 **Outcome:**
-- ✅ **Seats Released:** Available for new bookings
-- 📊 **Metrics Logged:** Number of expired bookings cleaned
-- ⚠️ **Race Condition:** `SKIP LOCKED` prevents conflicts with concurrent webhooks
+- ✅ **Abandoned Holds:** Expired + seats released (fast path)
+- ✅ **Late Success (No Conflict):** Seats reclaimed, booking confirmed
+- ✅ **Late Success (Conflict):** User 2 bumped to `SYSTEM_CANCELLED`, User 1 confirmed, audit recorded; refund attempted asynchronously
+- ⚠️ **Refund Debt:** User 2 marked `REFUND_REQUIRED_MANUAL` if refund fails
+- 📊 **Metrics Logged:** Cleanup + reconciliation counts and error rates
 
 ---
 

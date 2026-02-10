@@ -45,6 +45,11 @@ This documentation follows a **Design-First narrative**. Read in numerical order
    - Canonical refund failure/recovery outcomes
    - Terminal vs retryable admin reconciliation states
 
+10. **[010_booking_failure_recovery.md](architecture/010_booking_failure_recovery.md)** - The "Stability Contract"
+   - Booking reliability matrix (system/network failures)
+   - Late payment reclamation ("original payer wins")
+   - Non-transactional notification strategy
+
 ---
 
 ## 🧠 Design Decisions
@@ -86,12 +91,23 @@ Deep dives into architectural choices and trade-offs:
   - End-to-end request tracing across threads
   - **Key insight:** Same `requestId` across async boundaries
 
+- **[006_admin_scope_and_schema.md](decisions/006_admin_scope_and_schema.md)** - Admin Scope
+  - Role boundaries and permissions model
+  - Admin schema and auditability constraints
+
+- **[007_reclamation_and_lock_strategy.md](decisions/007_reclamation_and_lock_strategy.md)** - Reclamation & Lock Strategy
+  - Original payer priority for late payments
+  - `PESSIMISTIC_WRITE` seat lock during reclaim
+  - 30-second buffer to avoid premature release
+  - Refund-failure debt state (`REFUND_REQUIRED_MANUAL`)
+
 ---
 
 ## 🎯 Quick Reference
 
 ### Architecture Deep Dives
 - **Concurrency:** Read Flow H in [003_sequence_flows.md](architecture/003_sequence_flows.md#flow-h-concurrent-seat-reservation-the-race-condition)
+- **Stability (Phase 2):** See [010_booking_failure_recovery.md](architecture/010_booking_failure_recovery.md), Flow D in [003_sequence_flows.md](architecture/003_sequence_flows.md#flow-d-reliable-cleanup--reclamation-phase-2), and [007_reclamation_and_lock_strategy.md](decisions/007_reclamation_and_lock_strategy.md)
 - **Virtual Threads:** See [003_concurrency_model.md](decisions/003_concurrency_model.md)
 - **Async Events:** See [004_event_driven_notifications.md](decisions/004_event_driven_notifications.md)
 - **Observability:** See [005_observability_strategy.md](decisions/005_observability_strategy.md)

@@ -36,18 +36,32 @@ This document defines the **allowed and denied state transitions** for all entit
 | `CONFIRMED`        | Payment successful, booking finalized                                  |
 | `EXPIRED`          | Hold duration exceeded, booking invalidated                            |
 | `CANCELLED`        | User-initiated cancellation (pre-refund or within cancellation window) |
+| `SYSTEM_CANCELLED` | System-driven cancellation (integrity/reconciliation-driven)           |
 | `REFUND_INITIATED` | Admin refund in progress, row locked, awaiting Stripe response         |
 | `REFUND_FAILED`    | Terminal refund failure; manual intervention required                   |
 | `REFUNDED`         | Funds returned to user, financial ledger settled                       |
 | `COMPLETED`        | Showtime passed, booking lifecycle ended                               |
 | `REFUND_REQUIRED`  | Payment succeeded but booking integrity violated                       |
-#### State Disambiguation: CANCELLED vs REFUNDED
+| `REFUND_REQUIRED_MANUAL`  | Automated refund attempt failed; manual intervention required         |
+#### State Disambiguation: CANCELLED vs SYSTEM_CANCELLED vs REFUNDED
 
 **CANCELLED:**
 - **Actor:** User-initiated or system timeout
 - **Financial State:** May or may not involve refund (depends on cancellation policy)
 - **Use Case:** User cancels before showtime (within refund window)
 - **Seats:** Released back to AVAILABLE pool
+
+**SYSTEM_CANCELLED:**
+- **Actor:** System (integrity / reliability automation)
+- **Use Case:** The system cancels a booking to restore correctness after detecting an invariant breach.
+  - Example A (Bump): User 2 is displaced because User 1’s payment is verified late (“original payer wins”).
+  - Example B (Integrity): The server detects a correctness issue that requires forced cancellation.
+- **Financial State:** If payment is already captured, an automated refund is initiated (async).
+- **Operational Note:** If the automated refund attempt fails, transition to `REFUND_REQUIRED_MANUAL`.
+
+**REFUND_REQUIRED_MANUAL:**
+- **Meaning:** We attempted an automated refund (after `CANCELLED` or `SYSTEM_CANCELLED`) and it failed, leaving outstanding financial debt.
+- **Outcome:** Requires admin/manual settlement to close the ledger loop.
 
 **REFUNDED:**
 - **Actor:** Admin-initiated privileged operation
@@ -183,6 +197,7 @@ graph TD
     H[HELD] -->|payment success| C[CONFIRMED]
     H -->|timeout| E[EXPIRED]
     C -->|user cancellation| CA[CANCELLED]
+    C -->|system cancellation| SC[SYSTEM_CANCELLED]
     C -->|admin refund| RI[REFUND_INITIATED]
     RI -->|stripe success| RF[REFUNDED]
     RI -->|permanent gateway failure| RFF[REFUND_FAILED]
@@ -190,6 +205,8 @@ graph TD
     CO -->|admin refund| RI
     E -->|late payment| RR[REFUND_REQUIRED]
     C -->|integrity violation| RR
+    CA -->|refund failure| RRM[REFUND_REQUIRED_MANUAL]
+    SC -->|refund failure| RRM[REFUND_REQUIRED_MANUAL]
     
     style H fill:#FFD700
     style C fill:#90EE90
@@ -207,6 +224,7 @@ graph TD
 | `HELD`             | `CONFIRMED`        | Payment succeeds within hold window    |
 | `HELD`             | `EXPIRED`          | Hold duration exceeded                 |
 | `CONFIRMED`        | `CANCELLED`        | User cancels confirmed booking         |
+| `CONFIRMED`        | `SYSTEM_CANCELLED` | System cancellation (bump or integrity) |
 | `CONFIRMED`        | `REFUND_INITIATED` | Admin initiates refund (locks row)     |
 | `REFUND_INITIATED` | `REFUNDED`         | Stripe refund succeeds                 |
 | `REFUND_INITIATED` | `REFUND_FAILED`    | Permanent gateway failure (`4xx`)      |
@@ -214,6 +232,8 @@ graph TD
 | `COMPLETED`        | `REFUND_INITIATED` | Admin initiates refund (post-showtime) |
 | `EXPIRED`          | `REFUND_REQUIRED`  | Late payment after hold expiry         |
 | `CONFIRMED`        | `REFUND_REQUIRED`  | System integrity violation             |
+| `CANCELLED`        | `REFUND_REQUIRED_MANUAL`  | Automated refund failed (debt)  |
+| `SYSTEM_CANCELLED` | `REFUND_REQUIRED_MANUAL`  | Automated refund failed (debt)  |
 
 ### ❌ Denied Transitions
 
