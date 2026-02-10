@@ -17,8 +17,15 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.utility.TestcontainersConfiguration;
 
-import com.ticketledger.dto.*;
+import com.ticketledger.dto.ApiResponse;
+import com.ticketledger.dto.AuthResponse;
+import com.ticketledger.dto.BookingResponse;
+import com.ticketledger.dto.CreateBookingRequest;
+import com.ticketledger.dto.LoginRequest;
+import com.ticketledger.dto.RefreshTokenRequest;
+import com.ticketledger.dto.RegisterRequest;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -40,6 +47,9 @@ class BookingFlowIntegrationTest {
 
         @Autowired
         private JsonMapper objectMapper;
+
+        @Autowired
+        private MeterRegistry meterRegistry;
 
         // IDs from seed_test_data.sql
         private static final UUID SHOWTIME_ID = UUID.fromString("01937b5c-a444-7000-8000-444444444444");
@@ -175,6 +185,9 @@ class BookingFlowIntegrationTest {
                                 .expectBody()
                                 .jsonPath("$.success").isEqualTo(false)
                                 .jsonPath("$.error.code").isEqualTo("SEAT_ALREADY_BOOKED");
+
+                assertMetricCount("business.booking.attempt", "success", "none", 1);
+                assertMetricLatency("business.booking.attempt.latency", "success");
         }
 
         @Test
@@ -324,5 +337,16 @@ class BookingFlowIntegrationTest {
                                 .body(new RefreshTokenRequest(originalRefreshToken))
                                 .exchange()
                                 .expectStatus().is5xxServerError(); // Should fail with revoked token
+        }
+
+        private void assertMetricCount(String name, String status, String reason, long expectedCount) {
+                double count = meterRegistry.counter(name, "status", status, "reason", reason).count();
+                assertThat(count).isEqualTo(expectedCount);
+        }
+
+        private void assertMetricLatency(String name, String status) {
+                var timer = meterRegistry.timer(name, "status", status);
+                assertThat(timer.count()).isGreaterThan(0);
+                assertThat(timer.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS)).isGreaterThan(0);
         }
 }

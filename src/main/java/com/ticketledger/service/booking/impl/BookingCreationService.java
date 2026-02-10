@@ -15,7 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ticketledger.annotation.BusinessMetric;
 import com.ticketledger.config.BookingProperties;
+import com.ticketledger.constant.ErrorCodeConstant;
 import com.ticketledger.domain.entity.Booking;
 import com.ticketledger.domain.entity.BookingSeat;
 import com.ticketledger.domain.entity.Payment;
@@ -41,6 +43,7 @@ import com.ticketledger.service.IdempotencyService;
 import com.ticketledger.util.CryptoUtil;
 
 import lombok.RequiredArgsConstructor;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -62,6 +65,7 @@ public class BookingCreationService {
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     @Retryable(includes = PessimisticLockingFailureException.class, maxRetries = 3)
+    @BusinessMetric(name = "business.booking.attempt")
     public BookingResponse createBooking(CreateBookingRequest request, UUID userId, UUID idempotencyKey) {
         String requestHash = generateRequestHash(request, userId);
 
@@ -121,9 +125,20 @@ public class BookingCreationService {
 
         BookingResponse response = BookingResponse.fromEntity(booking, bookingSeats, payment);
 
-        JsonNode requestJson = jsonMapper.valueToTree(response);
-        idempotencyService.saveResponse(idempotencyKey, HttpStatus.CREATED.value(), requestJson);
+        saveIdempotencyResponse(idempotencyKey, response);
         return response;
+    }
+
+    private void saveIdempotencyResponse(UUID idempotencyKey, BookingResponse response) {
+        try {
+            JsonNode requestJson = jsonMapper.valueToTree(response);
+            idempotencyService.saveResponse(idempotencyKey, HttpStatus.CREATED.value(), requestJson);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(
+                    "Failed to serialize booking response",
+                    ErrorCodeConstant.INTERNAL_ERROR,
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     private String generateRequestHash(CreateBookingRequest request, UUID userId) {
@@ -133,11 +148,18 @@ public class BookingCreationService {
                     "request", request);
             String jsonString = jsonMapper.writeValueAsString(combined);
             return CryptoUtil.sha256(jsonString);
-        } catch (Exception e) {
+        } catch (JacksonException e) {
+            throw new BusinessException(
+                    "Failed to serialize request for hashing",
+                    ErrorCodeConstant.REQUEST_HASH_SERIALIZATION_FAILURE,
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    Map.of("userId", userId));
+        } catch (IllegalStateException e) {
             throw new BusinessException(
                     "Failed to generate request hash",
-                    "REQUEST_HASH_FAILURE",
-                    HttpStatus.INTERNAL_SERVER_ERROR);
+                    ErrorCodeConstant.REQUEST_HASH_GENERATION_FAILURE,
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    Map.of("userId", userId));
         }
     }
 
@@ -147,21 +169,30 @@ public class BookingCreationService {
                 || existingKeyOpt.get().getResponseBody() == null) {
             throw new BusinessException(
                     "Idempotent request in progress",
-                    "IDEMPOTENCY_IN_PROGRESS",
+                    ErrorCodeConstant.IDEMPOTENCY_IN_PROGRESS,
                     HttpStatus.CONFLICT);
         }
 
         var existingKey = existingKeyOpt.get();
         try {
             return jsonMapper.treeToValue(existingKey.getResponseBody(), BookingResponse.class);
-        } catch (Exception e) {
+        } catch (JacksonException e) {
             throw new BusinessException(
                     "Failed to deserialize idempotent response",
-                    "IDEMPOTENCY_RESPONSE_DESERIALIZATION_FAILURE",
-                    HttpStatus.INTERNAL_SERVER_ERROR);
+                    ErrorCodeConstant.IDEMPOTENCY_RESPONSE_DESERIALIZATION_FAILURE,
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    Map.of("idempotencyKey", idempotencyKey));
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(
+                    "Invalid idempotent response data",
+                    ErrorCodeConstant.IDEMPOTENCY_RESPONSE_DESERIALIZATION_FAILURE,
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    Map.of("idempotencyKey", idempotencyKey));
         }
     }
 
+    // ... (rest of helper methods: calculatePrice, createPendingPayment,
+    // validateSeats remain unchanged)
     private BigDecimal calculatePrice(Seat seat) {
         return bookingProperties.defaultBasePrice().multiply(seat.getTier().getPriceMultiplier());
     }
