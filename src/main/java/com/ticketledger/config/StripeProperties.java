@@ -3,11 +3,15 @@ package com.ticketledger.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Type-safe configuration for Stripe.
- * Maps keys under "ticketledger.payment.stripe".
+ * Configuration properties for Stripe integration.
+ * This class holds the necessary configuration values for Stripe, such as API
+ * keys and webhook secrets.
  */
-@ConfigurationProperties(prefix = "ticketledger.payment.stripe")
+
+@ConfigurationProperties(prefix = "stripe")
 public record StripeProperties(
-    String secretKey,
-    String adminAlertEmail
-) {}
+        String secretKey,
+        String webhookSecret,
+        String currency,
+        String adminAlertEmail) {
+}

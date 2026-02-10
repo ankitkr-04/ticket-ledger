@@ -8,27 +8,26 @@ spring:
     password: "${DB_PASSWORD:postgres}"
 
   jpa:
-   show-sql: false  # Show SQL statements in the console for debugging
-   properties:
-        hibernate:
-          format_sql: true  # Format SQL statements for better readability
-          use_sql_comments: true  # Add comments to SQL for easier debugging
-          highlight_sql: true  # Highlight SQL keywords in the console
-          jdbc:
-            batch_size: 50
-            order_updates: true
-            order_inserts: true
-
+    show-sql: false # Show SQL statements in the console for debugging
+    properties:
+      hibernate:
+        format_sql: true # Format SQL statements for better readability
+        use_sql_comments: true # Add comments to SQL for easier debugging
+        highlight_sql: true # Highlight SQL keywords in the console
+        jdbc:
+          batch_size: 50
+          order_updates: true
+          order_inserts: true
 
 logging:
-     level:
-       root: INFO # General application logging
-       com.ticketledger: DEBUG  # Application-specific logging
-       org.springframework.web: DEBUG  # Log web requests and responses
-       org.springframework.transaction: DEBUG  # Log transaction management
-       org.hibernate.SQL: DEBUG  # Log SQL statements
-       org.hibernate.orm.jdbc.bind: TRACE  # Log SQL parameter bindings
-       org.hibernate.stat: INFO # Log Hibernate statistics for performance tuning
+  level:
+    root: INFO # General application logging
+    com.ticketledger: DEBUG # Application-specific logging
+    org.springframework.web: DEBUG # Log web requests and responses
+    org.springframework.transaction: DEBUG # Log transaction management
+    org.hibernate.SQL: DEBUG # Log SQL statements
+    org.hibernate.orm.jdbc.bind: TRACE # Log SQL parameter bindings
+    org.hibernate.stat: INFO # Log Hibernate statistics for performance tuning
 
 management:
   tracing:
@@ -39,8 +38,8 @@ security:
   jwt:
     # 32+ char secret for DEV only. Use Env Vars for PROD.
     secret-key: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
-    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:900000}     # 15 minutes
-    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:86400000}  # 1 day (Dev convenience)
+    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:900000} # 15 minutes
+    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:86400000} # 1 day (Dev convenience)
   cors:
     allowed-origins:
       - "http://localhost:3000"
@@ -58,10 +57,12 @@ booking:
   lock-duration-minutes: 15
   default-base-price: 10.00
   currency: INR
-  cleanup-interval-ms: 60000  # 1 minute
+  cleanup-interval-ms: 60000 # 1 minute
 
 ticketledger:
   payment:
     stripe:
       secret-key: mock_stripe_secret_key_for_dev_environment
       admin-alert-email: ${ADMIN_ALERT_EMAIL:admin@ticketledger.local}
+      webhook-secret: mock_stripe_webhook_secret_for_dev_environment
+      currency: INR

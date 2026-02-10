@@ -37,7 +37,6 @@ security:
     access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:900000}
     refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:604800000}
 
-
 booking:
   lock-duration-minutes: 15
   default-base-price: 10.00
@@ -49,3 +48,5 @@ ticketledger:
     stripe:
       secret-key: ${STRIPE_SECRET_KEY}
       admin-alert-email: ${ADMIN_ALERT_EMAIL}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET}
+      currency: ${STRIPE_CURRENCY}
