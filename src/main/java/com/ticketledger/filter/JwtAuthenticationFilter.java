@@ -1,4 +1,4 @@
-package com.ticketledger.security;
+package com.ticketledger.filter;
 
 import java.io.IOException;
 
@@ -13,6 +13,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.ticketledger.constant.HttpHeaderConstant;
 import com.ticketledger.constant.SecurityConstant;
+import com.ticketledger.security.JwtService;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

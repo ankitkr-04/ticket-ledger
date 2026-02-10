@@ -21,9 +21,10 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.config.CorsProperties;
 import com.ticketledger.config.JwtProperties;
+import com.ticketledger.constant.RouteConstant;
+import com.ticketledger.filter.JwtAuthenticationFilter;
 
 import lombok.RequiredArgsConstructor;
 

@@ -2,8 +2,11 @@ package com.ticketledger.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,6 +26,7 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.utility.TestcontainersConfiguration;
 
+import com.ticketledger.dto.ApiResponse;
 import com.ticketledger.dto.CreateBookingRequest;
 import com.ticketledger.security.JwtService;
 
@@ -105,5 +109,55 @@ public class ConcurrencyIntegrationTest {
         assertThat(successCount.get()).as("Only one booking should succeed").isEqualTo(1);
         assertThat(conflictCount.get()).as("Others should fail with CONFLICT").isEqualTo(4);
         assertThat(errorCount.get()).as("No unexpected errors").isEqualTo(0);
+    }
+
+    @Test
+    @Sql(scripts = "/sql/seed_test_data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+    @Sql(scripts = "/sql/clean_test_data.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+    void shouldHandleConcurrentBookings_AndReturnUniqueTraceIds() throws Exception {
+        int numberOfThreads = 10;
+        CountDownLatch latch = new CountDownLatch(1);
+
+        CompletableFuture<String>[] futures = new CompletableFuture[numberOfThreads];
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i < numberOfThreads; i++) {
+                futures[i] = CompletableFuture.supplyAsync(() -> {
+                    try {
+                        latch.await();
+
+                        CreateBookingRequest request = new CreateBookingRequest(
+                                SHOWTIME_ID,
+                                List.of(UUID.randomUUID()));
+
+                        return restClient.post()
+                                .uri("/api/v1/bookings")
+                                .header("Authorization", "Bearer " + authToken)
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(request)
+                                .exchange()
+                                .returnResult(ApiResponse.class)
+                                .getResponseHeaders()
+                                .getFirst("X-Request-ID");
+                    } catch (Exception e) {
+                        return null;
+                    }
+                }, executor);
+            }
+
+            latch.countDown();
+            CompletableFuture.allOf(futures).join();
+        }
+
+        Set<String> traceIds = new HashSet<>();
+        for (var future : futures) {
+            String traceId = future.get();
+            assertThat(traceId).isNotNull();
+            traceIds.add(traceId);
+        }
+
+        assertThat(traceIds).hasSize(numberOfThreads)
+                .as("Trace IDs must be unique per request (Context Leak check)");
     }
 }
