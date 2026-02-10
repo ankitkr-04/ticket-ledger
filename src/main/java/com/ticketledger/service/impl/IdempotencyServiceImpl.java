@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ticketledger.domain.entity.IdempotencyKey;
 import com.ticketledger.domain.repository.IdempotencyKeyRepository;
 import com.ticketledger.exception.BusinessException;
-import com.ticketledger.exception.IdempotencyConflictException;
+import com.ticketledger.exception.domain.IdempotencyConflictException;
 import com.ticketledger.service.IdempotencyService;
 
 import lombok.RequiredArgsConstructor;

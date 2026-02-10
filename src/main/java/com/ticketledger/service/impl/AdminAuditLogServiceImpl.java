@@ -1,6 +1,7 @@
 package com.ticketledger.service.impl;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -20,7 +21,7 @@ import com.ticketledger.domain.repository.BookingRepository;
 import com.ticketledger.domain.repository.ShowtimeRepository;
 import com.ticketledger.domain.repository.TheaterRepository;
 import com.ticketledger.domain.repository.UserRepository;
-import com.ticketledger.exception.NotFoundException;
+import com.ticketledger.exception.common.NotFoundException;
 import com.ticketledger.service.AdminAuditLogService;
 
 import lombok.RequiredArgsConstructor;
@@ -46,7 +47,7 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
 
         // 2. Resolve Target Booking
         Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new NotFoundException("Booking not found: " + bookingId));
+                .orElseThrow(() -> new NotFoundException("Booking not found", Map.of("bookingId", bookingId)));
 
         // 3. Create Entry
         AdminAuditLog logEntry = new AdminAuditLog();
@@ -54,7 +55,7 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
 
         // Resolve theater id via query to avoid lazy graph traversal in async contexts.
         UUID theaterId = bookingRepository.findTheaterIdById(bookingId)
-                .orElseThrow(() -> new NotFoundException("Theater not found for booking: " + bookingId));
+                .orElseThrow(() -> new NotFoundException("Theater not found for booking", Map.of("bookingId", bookingId)));
         logEntry.setTheater(theaterRepository.getReferenceById(theaterId));
 
         logEntry.setAdminUser(admin);
@@ -73,7 +74,7 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AdminAuditLog createRefundLog(UUID bookingId, UUID adminId, String reason, String idempotencyKey) {
         Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new NotFoundException("Booking not found: " + bookingId));
+                .orElseThrow(() -> new NotFoundException("Booking not found", Map.of("bookingId", bookingId)));
 
         User admin = userRepository.getReferenceById(adminId); // Optimized: no fetch needed if ID valid
 
@@ -96,7 +97,7 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void completeLog(UUID logId, String providerRefundId) {
         AdminAuditLog logEntry = adminAuditLogRepository.findById(logId)
-                .orElseThrow(() -> new NotFoundException("Audit log not found: " + logId));
+                .orElseThrow(() -> new NotFoundException("Audit log not found", Map.of("logId", logId)));
 
         logEntry.setStatus(AdminLogStatus.COMPLETED);
         logEntry.setProviderRefundId(providerRefundId);
@@ -109,7 +110,7 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void failLog(UUID logId, String errorReason) {
         AdminAuditLog logEntry = adminAuditLogRepository.findById(logId)
-                .orElseThrow(() -> new NotFoundException("Audit log not found: " + logId));
+                .orElseThrow(() -> new NotFoundException("Audit log not found", Map.of("logId", logId)));
 
         logEntry.setStatus(AdminLogStatus.FAILED);
         logEntry.setReason(logEntry.getReason() + " | ERROR: " + errorReason);
@@ -122,7 +123,7 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
     public AdminAuditLog createShowtimeLog(UUID showtimeId, UUID adminId, AdminLogAction action, String reason,
             String idempotencyKey) {
         Showtime showtime = showtimeRepository.findById(showtimeId)
-                .orElseThrow(() -> new NotFoundException("Showtime not found: " + showtimeId));
+                .orElseThrow(() -> new NotFoundException("Showtime not found", Map.of("showtimeId", showtimeId)));
 
         User admin = userRepository.getReferenceById(adminId);
 

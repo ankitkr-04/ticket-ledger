@@ -9,8 +9,8 @@ import org.hibernate.type.SqlTypes;
 
 import com.ticketledger.domain.base.SoftDeletableEntity;
 import com.ticketledger.domain.enums.ShowtimeStatus;
-import com.ticketledger.exception.ShowtimeClosedException;
-import com.ticketledger.exception.ShowtimeExpiredException;
+import com.ticketledger.exception.domain.ShowtimeClosedException;
+import com.ticketledger.exception.domain.ShowtimeExpiredException;
 
 import jakarta.persistence.*;
 import lombok.Getter;

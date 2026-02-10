@@ -8,6 +8,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
 
+import com.ticketledger.constant.ErrorCodeConstant;
 import com.ticketledger.dto.ApiResponse;
 import com.ticketledger.service.context.RequestContext;
 
@@ -17,10 +18,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import tools.jackson.databind.json.JsonMapper;
 
-/**
- * Centralized REST authentication failure response for security filter-chain
- * errors.
- */
 @Component
 @RequiredArgsConstructor
 public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
@@ -34,7 +31,7 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
             HttpServletResponse response,
             AuthenticationException authException) throws IOException, ServletException {
         ApiResponse<Void> error = ApiResponse.error(
-                "UNAUTHORIZED",
+                ErrorCodeConstant.UNAUTHORIZED,
                 authException.getMessage(),
                 requestContext.getRequestId(),
                 null);

@@ -5,8 +5,16 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
+import com.ticketledger.constant.ErrorCodeConstant;
+import com.ticketledger.constant.ErrorMessageConstant;
+import com.ticketledger.constant.HttpHeaderConstant;
 import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.domain.enums.ShowtimeStatus;
 import com.ticketledger.dto.ApiResponse;
@@ -31,36 +39,16 @@ public class AdminShowtimeController {
     private final AdminAuthorizationService adminAuthorizationService;
     private final RequestContext requestContext;
 
-    /**
-     * Pause a showtime and expire all held bookings.
-     * <p>
-     * Enforces:
-     * 1. ADMIN role check
-     * 2. Theater-scope access check
-     * 3. Idempotency
-     *
-     * @param showtimeId     ID of the showtime
-     * @param request        Target status (must be PAUSED)
-     * @param idempotencyKey for audit
-     * @return Operation stats
-     */
     @PatchMapping("/{showtimeId}/status")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<ShowtimePauseResponse>> updateShowtimeStatus(
             @PathVariable UUID showtimeId,
             @Valid @RequestBody UpdateShowtimeStatusRequest request,
-            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+            @RequestHeader(HttpHeaderConstant.IDEMPOTENCY_KEY) String idempotencyKey) {
 
-        // Validation: Only allow PAUSED for now
-        if (request.status() != ShowtimeStatus.PAUSED) {
-            throw new BusinessException("Only PAUSED status is currently supported via this endpoint",
-                    "INVALID_STATUS_TRANSITION", HttpStatus.BAD_REQUEST);
-        }
-
-        // 1. Gatekeeper & Identity combined
+        validateStatusRequest(request.status());
         UUID adminId = adminAuthorizationService.assertShowtimeAccess(showtimeId);
 
-        // 2. Service Call
         ShowtimePauseResponse response = showtimeService.pauseShowtime(
                 showtimeId,
                 request.reason(),
@@ -68,5 +56,14 @@ public class AdminShowtimeController {
                 idempotencyKey);
 
         return ResponseEntity.ok(ApiResponse.success(response, requestContext.getRequestId()));
+    }
+
+    private static void validateStatusRequest(ShowtimeStatus requestedStatus) {
+        if (requestedStatus != ShowtimeStatus.PAUSED) {
+            throw new BusinessException(
+                    ErrorMessageConstant.ONLY_PAUSED_STATUS_SUPPORTED,
+                    ErrorCodeConstant.INVALID_STATUS_TRANSITION,
+                    HttpStatus.BAD_REQUEST);
+        }
     }
 }

@@ -17,7 +17,7 @@ import com.ticketledger.domain.enums.BookingStatus;
 import com.ticketledger.domain.enums.SeatStatus;
 import com.ticketledger.domain.repository.*;
 import com.ticketledger.dto.RefundResponse;
-import com.ticketledger.exception.PermanentGatewayException;
+import com.ticketledger.exception.common.PermanentGatewayException;
 import com.ticketledger.exception.TicketLedgerException;
 import com.ticketledger.service.EmailService;
 import com.ticketledger.service.gateway.PaymentGateway;

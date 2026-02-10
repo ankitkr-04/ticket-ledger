@@ -1,7 +1,7 @@
 package com.ticketledger.exception;
 
-import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.http.HttpStatus;
 
@@ -17,6 +17,6 @@ public abstract class TicketLedgerException extends RuntimeException {
         super(message);
         this.errorCode = errorCode;
         this.status = status;
-        this.context = context != null ? context : Collections.emptyMap();
+        this.context = Objects.requireNonNullElse(context, Map.of());
     }
 }

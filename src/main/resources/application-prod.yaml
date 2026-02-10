@@ -3,48 +3,46 @@ spring:
     activate:
       on-profile: prod
   datasource:
-    # In Prod, these come from Environment Variables (K8s Secrets / AWS Secrets Manager)
     url: ${DB_URL}
     username: ${DB_USER}
-    password: ${DB_PASS}
+    password: ${DB_PASSWORD:${DB_PASS}}
 
-    # HIKARI CONNECTION POOLING (Critical for High Concurrency)
     hikari:
       pool-name: TicketLedgerHiPool
-      maximum-pool-size: 20           # Tuned for standard 4-8 vCPU DB
-      minimum-idle: 10                # Keep warm connections ready
-      connection-timeout: 20000       # 20s timeout (Fail fast under load)
-      idle-timeout: 300000            # 5m
-      max-lifetime: 1200000           # 20m (Refresh connections to avoid stale network issues)
+      maximum-pool-size: 20
+      minimum-idle: 10
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
 
   jpa:
-    show-sql: false                   # ABSOLUTELY NO logging SQL in Prod (PII + Perf)
+    show-sql: false
     properties:
       hibernate:
         jdbc:
-          batch_size: 50              # Group inserts (great for bulk booking creation)
+          batch_size: 50
           order_inserts: true
           order_updates: true
-        generate_statistics: false    # Disable overhead unless diagnosing
+        generate_statistics: false
 
 logging:
   level:
     root: INFO
     com.ticketledger: INFO
-    # Silence Hibernate chatter in prod
     org.hibernate: WARN
 
 security:
   jwt:
-    secret-key: ${JWT_SECRET_KEY}            # Must be set in Environment Variables
-    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:900000}   # Default 15 minutes
-    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:604800000} # Default 7 days
+    secret-key: ${JWT_SECRET:${JWT_SECRET_KEY}}
+    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:900000}
+    refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION_MS:604800000}
 
 
 booking:
   lock-duration-minutes: 15
   default-base-price: 10.00
   currency: INR
+  cleanup-interval-ms: 60000
 
 ticketledger:
   payment:

@@ -22,8 +22,7 @@ public interface AdminAuthorizationService {
      *
      * @param theaterId the target theater ID
      * @return The UUID of the authorized Admin
-     * @throws com.ticketledger.exception.TheaterAccessDeniedException if access is denied
-     * @throws com.ticketledger.exception.ForbiddenException if user is not an admin
+     * @throws com.ticketledger.exception.domain.TheaterAccessDeniedException if access is denied
      */
     UUID assertTheaterAccess(UUID theaterId);
 
@@ -34,7 +33,7 @@ public interface AdminAuthorizationService {
      *
      * @param screenId the target screen ID
      * @return The UUID of the authorized Admin
-     * @throws com.ticketledger.exception.TheaterAccessDeniedException if access is denied
+     * @throws com.ticketledger.exception.domain.TheaterAccessDeniedException if access is denied
      */
     UUID assertScreenAccess(UUID screenId);
 
@@ -46,7 +45,7 @@ public interface AdminAuthorizationService {
      *
      * @param showtimeId the target showtime ID
      * @return The UUID of the authorized Admin
-     * @throws com.ticketledger.exception.TheaterAccessDeniedException if access is denied
+     * @throws com.ticketledger.exception.domain.TheaterAccessDeniedException if access is denied
      */
     UUID assertShowtimeAccess(UUID showtimeId);
 
@@ -58,7 +57,7 @@ public interface AdminAuthorizationService {
      *
      * @param bookingId the target booking ID
      * @return The UUID of the authorized Admin
-     * @throws com.ticketledger.exception.TheaterAccessDeniedException if access is denied
+     * @throws com.ticketledger.exception.domain.TheaterAccessDeniedException if access is denied
      */
     UUID assertBookingAccess(UUID bookingId);
 }

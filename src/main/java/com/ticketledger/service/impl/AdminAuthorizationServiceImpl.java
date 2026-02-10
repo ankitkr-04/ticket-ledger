@@ -1,5 +1,6 @@
 package com.ticketledger.service.impl;
 
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -9,9 +10,9 @@ import com.ticketledger.domain.repository.AdminTheaterAccessRepository;
 import com.ticketledger.domain.repository.BookingRepository;
 import com.ticketledger.domain.repository.ScreenRepository;
 import com.ticketledger.domain.repository.ShowtimeRepository;
-import com.ticketledger.exception.NotFoundException;
-import com.ticketledger.exception.ShowtimeNotFoundException;
-import com.ticketledger.exception.TheaterAccessDeniedException;
+import com.ticketledger.exception.common.NotFoundException;
+import com.ticketledger.exception.domain.ShowtimeNotFoundException;
+import com.ticketledger.exception.domain.TheaterAccessDeniedException;
 import com.ticketledger.security.AuthenticatedUser;
 import com.ticketledger.service.AdminAuthorizationService;
 import com.ticketledger.util.SecurityUtil;
@@ -57,7 +58,7 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
     @Transactional(readOnly = true)
     public UUID assertScreenAccess(UUID screenId) {
         UUID theaterId = screenRepository.findTheaterIdById(screenId)
-                .orElseThrow(() -> new NotFoundException("Screen not found: " + screenId));
+                .orElseThrow(() -> new NotFoundException("Screen not found", Map.of("screenId", screenId)));
 
         return assertTheaterAccess(theaterId);
     }
@@ -75,7 +76,7 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
     @Transactional(readOnly = true)
     public UUID assertBookingAccess(UUID bookingId) {
         UUID theaterId = bookingRepository.findTheaterIdById(bookingId)
-                .orElseThrow(() -> new NotFoundException("Booking not found: " + bookingId));
+                .orElseThrow(() -> new NotFoundException("Booking not found", Map.of("bookingId", bookingId)));
 
         return assertTheaterAccess(theaterId);
     }

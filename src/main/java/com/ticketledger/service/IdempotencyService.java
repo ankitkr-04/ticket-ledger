@@ -4,7 +4,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.ticketledger.domain.entity.IdempotencyKey;
-import com.ticketledger.exception.IdempotencyConflictException;
+import com.ticketledger.exception.domain.IdempotencyConflictException;
 
 import tools.jackson.databind.JsonNode;
 

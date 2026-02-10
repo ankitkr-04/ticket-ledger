@@ -1,6 +1,7 @@
 package com.ticketledger.service.impl;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -22,7 +23,7 @@ import com.ticketledger.domain.repository.SeatRepository;
 import com.ticketledger.domain.repository.ShowtimeRepository;
 import com.ticketledger.dto.ShowtimePauseResponse;
 import com.ticketledger.exception.BusinessException;
-import com.ticketledger.exception.NotFoundException;
+import com.ticketledger.exception.common.NotFoundException;
 import com.ticketledger.service.AdminAuditLogService;
 import com.ticketledger.service.ShowtimeService;
 
@@ -47,7 +48,7 @@ public class ShowtimeServiceImpl implements ShowtimeService {
 
         // 1. Lock Showtime
         Showtime showtime = showtimeRepository.findByIdWithLock(showtimeId)
-                .orElseThrow(() -> new NotFoundException("Showtime not found: " + showtimeId));
+                .orElseThrow(() -> new NotFoundException("Showtime not found", Map.of("showtimeId", showtimeId)));
 
         // 2. Already Paused Check
         if (showtime.getStatus() == ShowtimeStatus.PAUSED) {

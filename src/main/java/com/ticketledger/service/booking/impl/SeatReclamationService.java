@@ -24,7 +24,7 @@ import com.ticketledger.domain.event.BookingRefundEvent;
 import com.ticketledger.domain.repository.BookingRepository;
 import com.ticketledger.domain.repository.BookingSeatRepository;
 import com.ticketledger.domain.repository.SeatRepository;
-import com.ticketledger.exception.NotFoundException;
+import com.ticketledger.exception.common.NotFoundException;
 import com.ticketledger.service.AdminAuditLogService;
 
 import lombok.RequiredArgsConstructor;
@@ -47,7 +47,7 @@ public class SeatReclamationService {
         List<Seat> lockedSeats = seatRepository.findAllByIdInWithLock(seatIds);
 
         Booking user1Booking = bookingRepository.findByIdWithLock(lateBookingId)
-                .orElseThrow(() -> new NotFoundException("Booking Not Found: " + lateBookingId));
+                .orElseThrow(() -> new NotFoundException("Booking not found", Map.of("bookingId", lateBookingId)));
 
         if (user1Booking.getStatus() == BookingStatus.CONFIRMED) {
             return;

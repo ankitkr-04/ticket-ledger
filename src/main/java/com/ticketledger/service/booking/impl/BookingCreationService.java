@@ -35,8 +35,8 @@ import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.dto.BookingResponse;
 import com.ticketledger.dto.CreateBookingRequest;
 import com.ticketledger.exception.BusinessException;
-import com.ticketledger.exception.SeatAlreadyBookedException;
-import com.ticketledger.exception.ShowtimeNotFoundException;
+import com.ticketledger.exception.domain.SeatAlreadyBookedException;
+import com.ticketledger.exception.domain.ShowtimeNotFoundException;
 import com.ticketledger.service.IdempotencyService;
 import com.ticketledger.util.CryptoUtil;
 
