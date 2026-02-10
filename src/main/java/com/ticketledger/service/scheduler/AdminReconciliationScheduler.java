@@ -10,20 +10,29 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketledger.config.StripeProperties;
-import com.ticketledger.domain.entity.*;
-import com.ticketledger.domain.event.BookingRefundEvent;
+import com.ticketledger.domain.entity.AdminAuditLog;
+import com.ticketledger.domain.entity.Booking;
+import com.ticketledger.domain.entity.BookingSeat;
+import com.ticketledger.domain.entity.Payment;
+import com.ticketledger.domain.entity.Seat;
 import com.ticketledger.domain.enums.AdminLogStatus;
 import com.ticketledger.domain.enums.BookingStatus;
 import com.ticketledger.domain.enums.SeatStatus;
-import com.ticketledger.domain.repository.*;
+import com.ticketledger.domain.event.BookingRefundEvent;
+import com.ticketledger.domain.repository.AdminAuditLogRepository;
+import com.ticketledger.domain.repository.BookingRepository;
+import com.ticketledger.domain.repository.BookingSeatRepository;
+import com.ticketledger.domain.repository.PaymentRepository;
+import com.ticketledger.domain.repository.SeatRepository;
 import com.ticketledger.dto.RefundResponse;
-import com.ticketledger.exception.common.PermanentGatewayException;
 import com.ticketledger.exception.TicketLedgerException;
+import com.ticketledger.exception.common.PermanentGatewayException;
 import com.ticketledger.service.EmailService;
 import com.ticketledger.service.gateway.PaymentGateway;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 
 /**
  * Cron job to reconcile 'stuck' admin operations.
@@ -55,6 +64,7 @@ public class AdminReconciliationScheduler {
     private final StripeProperties stripeProperties;
 
     @Scheduled(fixedDelay = 60000)
+    @SchedulerLock(name = "AdminReconciliationScheduler_reconcilePayments")
     public void reconcileOrphanedRefunds() {
         Instant threshold = Instant.now().minusSeconds(60);
         int processedCount = 0;

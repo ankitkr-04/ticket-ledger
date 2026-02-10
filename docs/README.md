@@ -54,6 +54,10 @@ This documentation follows a **Design-First narrative**. Read in numerical order
    - Business metrics emitted by core services
    - Tags, alerting, and SLO targets
 
+12. **[012_distributed_locking.md](architecture/012_distributed_locking.md)** - The "Scheduling Contract"
+   - Distributed scheduler locking strategy
+   - ShedLock defaults and operational failure modes
+
 ---
 
 ## 🧠 Design Decisions

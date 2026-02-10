@@ -17,6 +17,7 @@ import com.ticketledger.service.gateway.PaymentGateway;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 
 @Component
 @RequiredArgsConstructor
@@ -28,6 +29,7 @@ public class BookingCleanupScheduler {
     private final PaymentGateway paymentGateway;
 
     @Scheduled(fixedDelayString = "${booking.cleanup-interval-ms:60000}")
+    @SchedulerLock(name = "BookingCleanupScheduler_cleanupExpiredBookings")
     public void cleanupExpiredBookings() {
         // Architecture 010: 30-second safety buffer for clock drift/gateway lag
         Instant safetyThreshold = Instant.now().minusSeconds(30);
