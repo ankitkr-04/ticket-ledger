@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ticketledger.constant.SecurityConstant;
 import com.ticketledger.domain.entity.AdminAuditLog;
 import com.ticketledger.domain.entity.Booking;
 import com.ticketledger.domain.entity.Showtime;
@@ -33,6 +34,36 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
     private final ShowtimeRepository showtimeRepository;
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void logAction(UUID adminId, UUID bookingId, AdminLogAction action, AdminLogStatus status, String reason) {
+        // 1. Resolve Actor (Default to System constant if null)
+        UUID actorId = (adminId != null) ? adminId : SecurityConstant.SYSTEM_ADMIN_ID;
+        User admin = userRepository.getReferenceById(actorId);
+
+        // 2. Resolve Target Booking
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new NotFoundException("Booking not found: " + bookingId));
+
+        // 3. Create Entry
+        AdminAuditLog logEntry = new AdminAuditLog();
+        logEntry.setBooking(booking);
+
+        // Automatically link to the theater for reporting/scoping
+        logEntry.setTheater(booking.getShowtime().getScreen().getTheater());
+
+        logEntry.setAdminUser(admin);
+        logEntry.setAction(action);
+        logEntry.setStatus(status);
+        logEntry.setReason(reason);
+
+        if (status == AdminLogStatus.COMPLETED) {
+            logEntry.setCompletedAt(Instant.now());
+        }
+
+        adminAuditLogRepository.save(logEntry);
+    }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)

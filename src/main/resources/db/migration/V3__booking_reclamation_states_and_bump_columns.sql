@@ -21,3 +21,14 @@ COMMENT ON COLUMN bookings.bumped_by_booking_id IS
     'Refers to the original User 1 booking that displaced this User 2 booking';
 COMMENT ON COLUMN bookings.system_cancellation_reason IS
     'System-provided reason when booking is force-cancelled for reliability/integrity recovery';
+
+-- 4) Insert a system user for internal operations (if not already present)
+INSERT INTO users (id, email, password_hash, role, full_name, is_verified)
+VALUES (
+    '00000000-0000-0000-0000-000000000000', 
+    'system@ticketledger.internal', 
+    'SYSTEM_INTERNAL_ONLY', 
+    'ADMIN', 
+    'TicketLedger System', 
+    true
+) ON CONFLICT (id) DO NOTHING;

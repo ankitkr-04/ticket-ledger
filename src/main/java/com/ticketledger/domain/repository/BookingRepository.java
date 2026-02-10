@@ -57,4 +57,5 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT b FROM Booking b WHERE b.showtime.id = :showtimeId AND b.status = 'HELD'")
     List<Booking> findHeldBookingsByShowtimeIdWithLock(UUID showtimeId);
+
 }

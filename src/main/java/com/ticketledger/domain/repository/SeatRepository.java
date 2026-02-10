@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.ticketledger.domain.entity.Seat;
@@ -41,4 +42,10 @@ public interface SeatRepository extends JpaRepository<Seat, UUID> {
     default List<Seat> findAvailableSeats(UUID showtimeId) {
         return findByShowtimeIdAndStatus(showtimeId, SeatStatus.AVAILABLE);
     }
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints({ @QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000") }) // Fail fast after 3s
+    @Query("SELECT s FROM Seat s " +
+            "WHERE s.id IN :ids ORDER BY s.id ASC") // Deterministic ordering by ID
+    List<Seat> findAllByIdInWithLock(@Param("ids") List<UUID> ids);
 }

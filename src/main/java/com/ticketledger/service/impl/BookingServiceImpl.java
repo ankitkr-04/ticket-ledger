@@ -19,19 +19,32 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ticketledger.config.BookingProperties;
-import com.ticketledger.domain.entity.*;
+import com.ticketledger.domain.entity.Booking;
+import com.ticketledger.domain.entity.BookingSeat;
+import com.ticketledger.domain.entity.Payment;
+import com.ticketledger.domain.entity.Seat;
+import com.ticketledger.domain.entity.Showtime;
+import com.ticketledger.domain.entity.User;
+import com.ticketledger.domain.enums.AdminLogAction;
+import com.ticketledger.domain.enums.AdminLogStatus;
 import com.ticketledger.domain.enums.BookingStatus;
 import com.ticketledger.domain.enums.PaymentProvider;
 import com.ticketledger.domain.enums.PaymentStatus;
 import com.ticketledger.domain.enums.SeatStatus;
 import com.ticketledger.domain.event.BookingConfirmedEvent;
 import com.ticketledger.domain.event.BookingRefundEvent;
-import com.ticketledger.domain.repository.*;
+import com.ticketledger.domain.repository.BookingRepository;
+import com.ticketledger.domain.repository.BookingSeatRepository;
+import com.ticketledger.domain.repository.PaymentRepository;
+import com.ticketledger.domain.repository.SeatRepository;
+import com.ticketledger.domain.repository.ShowtimeRepository;
+import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.dto.BookingResponse;
 import com.ticketledger.dto.CreateBookingRequest;
 import com.ticketledger.dto.PaymentWebhookRequest;
 import com.ticketledger.dto.RefundResponse;
 import com.ticketledger.exception.BusinessException;
+import com.ticketledger.exception.NotFoundException;
 import com.ticketledger.exception.SeatAlreadyBookedException;
 import com.ticketledger.exception.ShowtimeNotFoundException;
 import com.ticketledger.service.AdminAuditLogService;
@@ -64,6 +77,81 @@ public class BookingServiceImpl implements BookingService {
         private final TransactionTemplate transactionTemplate;
         private final PaymentGateway paymentGateway;
         private final AdminAuditLogService adminAuditLogService;
+
+        @Transactional
+        public void reclaimSeatForLatePayment(UUID lateBookingId) {
+                List<UUID> seatIds = bookingSeatRepository.findSeatIdsByBookingId(lateBookingId);
+
+                List<Seat> lockedSeats = seatRepository.findAllByIdInWithLock(seatIds);
+
+                Booking user1Booking = bookingRepository.findByIdWithLock(lateBookingId)
+                                .orElseThrow(() -> new NotFoundException("Booking Not Found: " + lateBookingId));
+
+                List<Booking> conflictingBookings = bookingSeatRepository.findConfirmedBookingsBySeatIds(seatIds);
+
+                if (conflictingBookings.isEmpty()) {
+                        processCleanReclaim(user1Booking, lockedSeats);
+                } else {
+                        processReclamationBump(user1Booking, conflictingBookings, lockedSeats);
+                }
+
+        }
+
+        private void processCleanReclaim(Booking user1Booking, List<Seat> lockedSeats) {
+                lockedSeats.forEach(seat -> {
+                        seat.setStatus(SeatStatus.SOLD);
+                        seatRepository.save(seat);
+                });
+                user1Booking.setStatus(BookingStatus.CONFIRMED);
+                bookingRepository.save(user1Booking);
+
+                eventPublisher.publishEvent(new BookingConfirmedEvent(
+                                user1Booking.getId(),
+                                user1Booking.getUser().getEmail(),
+                                lockedSeats.stream().map(Seat::getTier)
+                                                .map(t -> bookingProperties.defaultBasePrice()
+                                                                .multiply(t.getPriceMultiplier()))
+                                                .reduce(BigDecimal.ZERO, BigDecimal::add),
+                                Instant.now()));
+        }
+
+        private void processReclamationBump(Booking user1Booking, List<Booking> conflictingBookings,
+                        List<Seat> lockedSeats) {
+
+                // Original Payer wins
+
+                conflictingBookings.forEach(conflict -> {
+                        conflict.setStatus(BookingStatus.SYSTEM_CANCELLED);
+                        conflict.setBumpedByBookingId(user1Booking.getId());
+                        conflict.setSystemCancellationReason(
+                                        "Seat reclaimed by original payer after late payment verification.");
+                        bookingRepository.save(conflict);
+
+                        eventPublisher.publishEvent(new BookingRefundEvent(
+                                        conflict.getId(),
+                                        conflict.getUser().getEmail(),
+                                        BigDecimal.ZERO, // Will Resolved by payment record listener to avoid double
+                                                         // refunds
+                                        "Booking cancelled due to seat reclamation after late payment verification.",
+                                        Instant.now()));
+                });
+
+                user1Booking.setStatus(BookingStatus.CONFIRMED);
+                bookingRepository.save(user1Booking);
+
+                lockedSeats.forEach(seat -> {
+                        seat.setStatus(SeatStatus.SOLD);
+                        seatRepository.save(seat);
+                });
+
+                adminAuditLogService.logSystemAction(
+                                user1Booking.getId(),
+                                AdminLogAction.AUTO_RECLAMATION_CONFLICT,
+                                AdminLogStatus.COMPLETED,
+                                "Seats reclaimed by original payer after late payment verification, causing "
+                                                + conflictingBookings.size()
+                                                + " conflicting bookings to be cancelled.");
+        }
 
         @Override
         @Transactional(isolation = Isolation.REPEATABLE_READ)

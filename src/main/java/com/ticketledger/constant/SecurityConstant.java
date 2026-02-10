@@ -1,5 +1,7 @@
 package com.ticketledger.constant;
 
+import java.util.UUID;
+
 /**
  * Security-related constants including token prefixes and algorithms.
  * Centralizes crypto and authentication magic strings.
@@ -32,4 +34,7 @@ public final class SecurityConstant {
      * 32 bytes = 256 bits = sufficient entropy for refresh tokens.
      */
     public static final int SECURE_RANDOM_BYTES = 32;
+
+    public static final UUID SYSTEM_ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+
 }
