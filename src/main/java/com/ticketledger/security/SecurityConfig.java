@@ -56,8 +56,10 @@ public class SecurityConfig {
                                 RouteConstant.AUTH_PATH + "/register",
                                 RouteConstant.AUTH_PATH + "/refresh",
                                 RouteConstant.WEBHOOK_PATH + "/**",
-                                "/actuator/health")
+                                "/actuator/health",
+                                "/actuator/health/**")
                         .permitAll()
+                        .requestMatchers("/actuator/**").hasRole("OWNER")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();

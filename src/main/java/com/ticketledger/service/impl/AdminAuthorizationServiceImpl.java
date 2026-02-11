@@ -15,6 +15,7 @@ import com.ticketledger.exception.domain.ShowtimeNotFoundException;
 import com.ticketledger.exception.domain.TheaterAccessDeniedException;
 import com.ticketledger.security.AuthenticatedUser;
 import com.ticketledger.service.AdminAuthorizationService;
+import com.ticketledger.service.context.RequestContext;
 import com.ticketledger.util.SecurityUtil;
 
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,7 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
     private final ScreenRepository screenRepository;
     private final ShowtimeRepository showtimeRepository;
     private final BookingRepository bookingRepository;
+    private final RequestContext requestContext;
     // TheaterRepository is not strictly needed if we trust the IDs from child
     // entities,
     // but good for assertTheaterAccess existence check if we want to be strict
@@ -51,6 +53,8 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
         if (!hasAccess) {
             throw new TheaterAccessDeniedException("Access denied to theater: " + theaterId);
         }
+
+        requestContext.setTheaterId(theaterId);
         return user.getId();
     }
 

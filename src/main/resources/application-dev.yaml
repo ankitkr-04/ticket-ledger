@@ -30,6 +30,13 @@ logging:
     org.hibernate.stat: INFO # Log Hibernate statistics for performance tuning
 
 management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:1.0} # Defaults to 1.0 if env var not set

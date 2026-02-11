@@ -52,6 +52,7 @@ class BookingFlowIntegrationTest {
         private MeterRegistry meterRegistry;
 
         // IDs from seed_test_data.sql
+        private static final String THEATER_ID = "01937b5c-a000-7000-8000-000000000001";
         private static final UUID SHOWTIME_ID = UUID.fromString("01937b5c-a444-7000-8000-444444444444");
         private static final UUID SEAT_1_ID = UUID.fromString("01937b5c-a555-7000-8000-555555555551");
         private static final UUID SEAT_2_ID = UUID.fromString("01937b5c-a555-7000-8000-555555555552");
@@ -186,9 +187,9 @@ class BookingFlowIntegrationTest {
                                 .jsonPath("$.success").isEqualTo(false)
                                 .jsonPath("$.error.code").isEqualTo("SEAT_ALREADY_BOOKED");
 
-                assertMetricCount("business.booking.attempt", "success", "none", 2);
-                assertMetricLatency("business.booking.attempt.latency", "success");
-                assertMetricCount("business.booking.attempt", "failure", "SEAT_ALREADY_BOOKED", 1);
+                assertMetricCount("business.booking.attempt", "success", "none", THEATER_ID, 2);
+                assertMetricLatency("business.booking.attempt.latency", "success", THEATER_ID);
+                assertMetricCount("business.booking.attempt", "failure", "SEAT_ALREADY_BOOKED", THEATER_ID, 1);
         }
 
         @Test
@@ -340,13 +341,14 @@ class BookingFlowIntegrationTest {
                                 .expectStatus().is5xxServerError(); // Should fail with revoked token
         }
 
-        private void assertMetricCount(String name, String status, String reason, long expectedCount) {
-                double count = meterRegistry.counter(name, "status", status, "reason", reason).count();
+        private void assertMetricCount(String name, String status, String reason, String theaterId, long expectedCount) {
+                double count = meterRegistry.counter(name, "status", status, "reason", reason, "theater_id", theaterId)
+                                .count();
                 assertThat(count).isEqualTo(expectedCount);
         }
 
-        private void assertMetricLatency(String name, String status) {
-                var timer = meterRegistry.timer(name, "status", status);
+        private void assertMetricLatency(String name, String status, String theaterId) {
+                var timer = meterRegistry.timer(name, "status", status, "theater_id", theaterId);
                 assertThat(timer.count()).isGreaterThan(0);
                 assertThat(timer.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS)).isGreaterThan(0);
         }

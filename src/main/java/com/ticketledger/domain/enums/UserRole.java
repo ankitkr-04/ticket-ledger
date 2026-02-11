@@ -5,5 +5,6 @@ package com.ticketledger.domain.enums;
  */
 public enum UserRole {
     CUSTOMER,
-    ADMIN
+    ADMIN,
+    OWNER
 }

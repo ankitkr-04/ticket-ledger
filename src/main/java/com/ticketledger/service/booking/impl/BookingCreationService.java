@@ -40,6 +40,7 @@ import com.ticketledger.exception.BusinessException;
 import com.ticketledger.exception.domain.SeatAlreadyBookedException;
 import com.ticketledger.exception.domain.ShowtimeNotFoundException;
 import com.ticketledger.service.IdempotencyService;
+import com.ticketledger.service.context.RequestContext;
 import com.ticketledger.util.CryptoUtil;
 
 import lombok.RequiredArgsConstructor;
@@ -62,6 +63,7 @@ public class BookingCreationService {
 
     private final IdempotencyService idempotencyService;
     private final JsonMapper jsonMapper;
+    private final RequestContext requestContext;
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     @Retryable(includes = PessimisticLockingFailureException.class, maxRetries = 3)
@@ -85,6 +87,8 @@ public class BookingCreationService {
 
         Showtime showtime = showtimeRepository.findById(request.showtimeId())
                 .orElseThrow(() -> new ShowtimeNotFoundException(request.showtimeId()));
+
+        requestContext.setTheaterId(showtime.getScreen().getTheater().getId());
 
         showtime.checkBookable();
 

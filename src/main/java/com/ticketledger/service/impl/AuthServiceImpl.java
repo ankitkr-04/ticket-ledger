@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.ticketledger.config.JwtProperties;
 import com.ticketledger.domain.entity.RefreshToken;
 import com.ticketledger.domain.entity.User;
+import com.ticketledger.domain.enums.UserRole;
 import com.ticketledger.domain.repository.RefreshTokenRepository;
 import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.dto.AuthResponse;
@@ -62,6 +63,13 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        if (request.getRole() == UserRole.OWNER) {
+            throw new BusinessException(
+                    "OWNER role cannot be self-registered",
+                    "ROLE_REGISTRATION_NOT_ALLOWED",
+                    HttpStatus.FORBIDDEN);
+        }
+
         // 1. Check if email already exists
         if (userRepository.existsByEmail(request.email())) {
             throw new BusinessException(

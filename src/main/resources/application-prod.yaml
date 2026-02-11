@@ -31,6 +31,15 @@ logging:
     com.ticketledger: INFO
     org.hibernate: WARN
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
+
 security:
   jwt:
     secret-key: ${JWT_SECRET:${JWT_SECRET_KEY}}
