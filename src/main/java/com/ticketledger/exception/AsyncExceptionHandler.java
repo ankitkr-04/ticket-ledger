@@ -19,8 +19,11 @@ public class AsyncExceptionHandler implements AsyncUncaughtExceptionHandler {
 
     @Override
     public void handleUncaughtException(Throwable ex, java.lang.reflect.Method method, Object... params) {
-        log.error("Async error in method: {}", method.getName(), ex.getMessage(),
-                Arrays.toString(params), ex);
+        log.error("ASYNC FAILURE | Method: {} | Error: {} | Params: {}",
+                method.getName(),
+                ex.getMessage(),
+                Arrays.toString(params),
+                ex); // Exception as last arg ensures stack trace printing
         meterRegistry.counter("async.execution.failure",
 
                 List.of(

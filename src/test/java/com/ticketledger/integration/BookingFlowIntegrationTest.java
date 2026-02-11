@@ -41,6 +41,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Import(TestcontainersConfiguration.class)
 @ActiveProfiles("test")
 class BookingFlowIntegrationTest {
+        private static final String GLOBAL_THEATER_TAG = "--global";
 
         @Autowired
         private RestTestClient restClient;
@@ -342,13 +343,16 @@ class BookingFlowIntegrationTest {
         }
 
         private void assertMetricCount(String name, String status, String reason, String theaterId, long expectedCount) {
-                double count = meterRegistry.counter(name, "status", status, "reason", reason, "theater_id", theaterId)
+                String expectedTheaterTag = theaterId == null ? GLOBAL_THEATER_TAG : theaterId;
+                double count = meterRegistry.counter(name, "status", status, "reason", reason, "theater_id",
+                                expectedTheaterTag)
                                 .count();
                 assertThat(count).isEqualTo(expectedCount);
         }
 
         private void assertMetricLatency(String name, String status, String theaterId) {
-                var timer = meterRegistry.timer(name, "status", status, "theater_id", theaterId);
+                String expectedTheaterTag = theaterId == null ? GLOBAL_THEATER_TAG : theaterId;
+                var timer = meterRegistry.timer(name, "status", status, "theater_id", expectedTheaterTag);
                 assertThat(timer.count()).isGreaterThan(0);
                 assertThat(timer.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS)).isGreaterThan(0);
         }

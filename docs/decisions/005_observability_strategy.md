@@ -7,12 +7,13 @@ This document explains the **observability strategy** for TicketLedger, focusing
 ### ✅ This file contains:
 - Context: Why observability is critical for async systems
 - Decision: MDC-based correlation + Structured logging
+- Decision: `OWNER` vs `ADMIN` observability access boundary
 - Rationale: Tracking requests across threads/events
 - Standards: Log format, key fields, retention
 - Trade-offs: JSON logs vs readability
 
 ### ❌ This file does NOT contain:
-- Metrics/APM tooling (see [011_metrics_catalog.md](../architecture/011_metrics_catalog.md))
+- Full metric inventory (see [011_metrics_catalog.md](../architecture/011_metrics_catalog.md))
 - Log aggregation infrastructure (ELK/Splunk setup)
 - Alerting rules (see runbooks)
 
@@ -98,6 +99,20 @@ With 10,000 concurrent virtual threads, logs from different requests are interle
 
 Use **MDC (Mapped Diagnostic Context)** to inject correlation IDs into all log lines, with **structured logging** (JSON format) in production.
 
+### 3.0 Access Boundary for Observability Surfaces
+
+To avoid cross-tenant data leakage and preserve clear audit boundaries:
+
+| Role | Scope | Allowed Observability Surface |
+| :--- | :--- | :--- |
+| `ADMIN` | Theater-scoped | Theater business operations and theater-scoped APIs only |
+| `OWNER` | Platform-scoped | `/actuator/**` for system health, metrics, and Prometheus |
+
+**Policy:**
+- `/actuator/health` remains public for liveness/readiness checks.
+- All other Actuator endpoints are restricted to `OWNER`.
+- `OWNER` is not a shortcut for theater business write operations; booking/refund/showtime write flows remain theater-admin scoped.
+
 ### 3.1 Core Components
 
 #### MDC Fields
@@ -133,6 +148,13 @@ Use **MDC (Mapped Diagnostic Context)** to inject correlation IDs into all log l
 }
 ```
 
+### 3.2 Metric Correlation Strategy
+
+- Business metrics are emitted through `MetricAspect`.
+- Each business metric includes `theater_id` from `RequestContext`.
+- Missing theater context resolves to `--global` to keep dashboards queryable without null handling.
+- Async uncaught failures are captured by `AsyncExceptionHandler` and emitted as `async.execution.failure{method,exception}`.
+
 ---
 
 ## 4. Implementation Details
@@ -160,6 +182,14 @@ Use **MDC (Mapped Diagnostic Context)** to inject correlation IDs into all log l
 ```gradle
 implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
 ```
+
+### 4.4 Async Failure Interception
+
+- `@EnableAsync` uses `AsyncConfig` with virtual-thread-backed `SimpleAsyncTaskExecutor`.
+- `AsyncExceptionHandler` is registered as the global `AsyncUncaughtExceptionHandler`.
+- On every uncaught async exception:
+  - full stack trace is logged with method + params context
+  - metric `async.execution.failure` is incremented with `method` and `exception` tags
 
 ---
 

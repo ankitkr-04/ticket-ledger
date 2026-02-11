@@ -69,6 +69,9 @@ public class BookingCreationService {
     @Retryable(includes = PessimisticLockingFailureException.class, maxRetries = 3)
     @BusinessMetric(name = "business.booking.attempt")
     public BookingResponse createBooking(CreateBookingRequest request, UUID userId, UUID idempotencyKey) {
+        showtimeRepository.findTheaterIdById(request.showtimeId())
+                .ifPresent(requestContext::setTheaterId);
+
         String requestHash = generateRequestHash(request, userId);
 
         boolean isLockAcquired = idempotencyService.lock(idempotencyKey, userId, requestHash);

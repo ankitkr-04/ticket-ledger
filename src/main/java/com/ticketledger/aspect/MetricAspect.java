@@ -38,8 +38,7 @@ public class MetricAspect {
         invocationStack.get().push(new MetricInvocation(
                 businessMetric.name(),
                 businessMetric.recordLatency(),
-                sample,
-                requestContext.getTheaterTag()));
+                sample));
     }
 
     @AfterReturning("@annotation(businessMetric)")
@@ -56,7 +55,7 @@ public class MetricAspect {
         MetricInvocation invocation = popInvocation();
 
         String metricName = invocation != null ? invocation.metricName() : fallbackMetricName;
-        String theaterTag = invocation != null ? invocation.theaterTag() : requestContext.getTheaterTag();
+        String theaterTag = requestContext.getTheaterTag();
 
         meterRegistry.counter(metricName, List.of(
                 Tag.of("status", status),
@@ -94,7 +93,6 @@ public class MetricAspect {
     private record MetricInvocation(
             String metricName,
             boolean recordLatency,
-            Timer.Sample sample,
-            String theaterTag) {
+            Timer.Sample sample) {
     }
 }

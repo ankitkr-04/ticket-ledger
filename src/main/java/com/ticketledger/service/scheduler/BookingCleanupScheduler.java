@@ -29,7 +29,7 @@ public class BookingCleanupScheduler {
     private final PaymentGateway paymentGateway;
 
     @Scheduled(fixedDelayString = "${booking.cleanup-interval-ms:60000}")
-    @SchedulerLock(name = "BookingCleanupScheduler_cleanupExpiredBookings")
+    @SchedulerLock(name = "BookingCleanupScheduler_cleanupExpiredBookings", lockAtLeastFor = "${booking.cleanup.lock-at-least-for:PT30S}", lockAtMostFor = "${booking.cleanup.lock-at-most-for:PT10M}")
     public void cleanupExpiredBookings() {
         // Architecture 010: 30-second safety buffer for clock drift/gateway lag
         Instant safetyThreshold = Instant.now().minusSeconds(30);
