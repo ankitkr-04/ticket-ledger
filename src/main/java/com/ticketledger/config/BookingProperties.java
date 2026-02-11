@@ -9,5 +9,7 @@ public record BookingProperties(
                 int lockDurationMinutes,
                 BigDecimal defaultBasePrice,
                 String currency,
-                long cleanupIntervalMs) {
+                long cleanupIntervalMs,
+                int cleanupSafetyBufferSeconds,
+                int idempotencyExpirationHours) {
 }

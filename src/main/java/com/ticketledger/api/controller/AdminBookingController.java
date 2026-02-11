@@ -11,14 +11,13 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.ticketledger.constant.HttpHeaderConstant;
 import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.dto.AdminRefundRequest;
 import com.ticketledger.dto.ApiResponse;
 import com.ticketledger.dto.RefundResponse;
 import com.ticketledger.service.AdminAuthorizationService;
-import com.ticketledger.service.booking.BookingService;
-import com.ticketledger.service.context.RequestContext;
+import com.ticketledger.service.booking.BookingRefundService;
+import com.ticketledger.service.context.BookingRequestContext;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,22 +29,22 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class AdminBookingController {
 
-    private final BookingService bookingService;
+    private final BookingRefundService bookingRefundService;
     private final AdminAuthorizationService adminAuthorizationService;
-    private final RequestContext requestContext;
+    private final BookingRequestContext requestContext;
 
     @PostMapping("/{bookingId}/refund")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<RefundResponse>> refundBooking(
             @PathVariable UUID bookingId,
             @Valid @RequestBody AdminRefundRequest request,
-            @RequestHeader(HttpHeaderConstant.IDEMPOTENCY_KEY) String idempotencyKey) {
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         log.info("Admin initiated refund for booking: {}", bookingId);
 
         UUID adminId = adminAuthorizationService.assertBookingAccess(bookingId);
 
-        RefundResponse response = bookingService.processAdminRefund(
+        RefundResponse response = bookingRefundService.processAdminRefund(
                 bookingId,
                 request.reason(),
                 adminId,
@@ -54,3 +53,4 @@ public class AdminBookingController {
         return ResponseEntity.ok(ApiResponse.success(response, requestContext.getRequestId()));
     }
 }
+

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ticketledger.config.AdminProperties;
 import com.ticketledger.config.StripeProperties;
 import com.ticketledger.domain.entity.AdminAuditLog;
 import com.ticketledger.domain.entity.Booking;
@@ -25,7 +26,7 @@ import com.ticketledger.domain.repository.BookingSeatRepository;
 import com.ticketledger.domain.repository.PaymentRepository;
 import com.ticketledger.domain.repository.SeatRepository;
 import com.ticketledger.dto.RefundResponse;
-import com.ticketledger.exception.TicketLedgerException;
+import com.ticketledger.exception.ApplicationException;
 import com.ticketledger.exception.common.PermanentGatewayException;
 import com.ticketledger.service.EmailService;
 import com.ticketledger.service.gateway.PaymentGateway;
@@ -62,13 +63,14 @@ public class AdminReconciliationScheduler {
     private final EmailService emailService;
     private final ApplicationEventPublisher eventPublisher;
     private final StripeProperties stripeProperties;
+    private final AdminProperties adminProperties;
 
     @Scheduled(fixedDelay = 60000)
     @SchedulerLock(name = "AdminReconciliationScheduler_reconcilePayments")
     public void reconcileOrphanedRefunds() {
-        Instant threshold = Instant.now().minusSeconds(60);
+        Instant threshold = Instant.now().minusSeconds(adminProperties.reconciliation().thresholdSeconds());
         int processedCount = 0;
-        int maxBatchSize = 50; // Safety limit to prevent infinite loops
+        int maxBatchSize = adminProperties.reconciliation().maxBatchSize();
 
         // Process one record at a time in separate transactions
         // Each iteration: Fetch 1 -> Process (Stripe call) -> Commit
@@ -109,80 +111,90 @@ public class AdminReconciliationScheduler {
         log.info("Reconciling AdminAuditLog ID: {}", auditLog.getId());
 
         try {
-            if (auditLog.getBooking() == null) {
-                log.warn("Skipping log ID {} as it has no booking target", auditLog.getId());
-                return;
-            }
-
-            // Fetch booking and payment
-            Booking booking = bookingRepository.findByIdWithLock(auditLog.getBooking().getId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "No booking found for booking ID: " + auditLog.getBooking().getId()));
-
-            Payment payment = paymentRepository.findByBookingId(booking.getId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "No payment found for booking ID: " + booking.getId()));
-
-            if (auditLog.getIdempotencyKey() == null) {
-                markAsFailed(auditLog, booking, "No idempotency key found for reconciliation");
-                alertAdmin(auditLog, "FAILED: No Idempotency Key found",
-                        "System could not reconcile because key is missing.");
-                return;
-            }
-
-            // RETRY / VERIFY with Gateway using SAME idempotency key
-            RefundResponse response = paymentGateway.refundPayment(
-                    payment.getProviderTransactionId(),
-                    payment.getAmount(),
-                    auditLog.getIdempotencyKey());
-
-            // SUCCESS PATH: Complete the refund fully
-            completeRefund(auditLog, booking, response);
-
+            ReconciliationContext ctx = validateAndFetchContext(auditLog);
+            RefundResponse response = executeRefund(ctx);
+            completeRefund(ctx, response);
             log.info("✅ Reconciled ID {} as COMPLETED", auditLog.getId());
-
+            
             alertAdmin(auditLog, "Refund Auto-Reconciled",
                     "The system successfully reconciled a stuck refund operation.\n" +
                             "Audit Log ID: " + auditLog.getId() + "\n" +
-                            "Booking ID: " + booking.getId() + "\n" +
+                            "Booking ID: " + ctx.booking.getId() + "\n" +
                             "Refund ID: " + response.providerRefundId());
 
         } catch (PermanentGatewayException e) {
-            log.error("Error reconciling log ID: {}", auditLog.getId(), e);
+            handlePermanentFailure(auditLog, e);
+        } catch (ApplicationException | IllegalStateException e) {
+            handleRetryableFailure(auditLog, e);
+        } catch (Exception e) {
+            handleUnknownFailure(auditLog, e);
+        }
+    }
 
+    private record ReconciliationContext(AdminAuditLog auditLog, Booking booking, Payment payment) {}
+
+    private ReconciliationContext validateAndFetchContext(AdminAuditLog auditLog) {
+        if (auditLog.getBooking() == null) {
+            throw new IllegalStateException("Skipping log ID " + auditLog.getId() + " - no booking target");
+        }
+
+        Booking booking = bookingRepository.findByIdWithLock(auditLog.getBooking().getId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "No booking found for booking ID: " + auditLog.getBooking().getId()));
+
+        Payment payment = paymentRepository.findByBookingId(booking.getId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "No payment found for booking ID: " + booking.getId()));
+
+        if (auditLog.getIdempotencyKey() == null) {
+            markAsFailed(auditLog, booking, "No idempotency key found for reconciliation");
+             throw new IllegalStateException("No idempotency key found");
+        }
+        
+        return new ReconciliationContext(auditLog, booking, payment);
+    }
+
+    private RefundResponse executeRefund(ReconciliationContext ctx) {
+        return paymentGateway.refundPayment(
+                ctx.payment.getProviderTransactionId(),
+                ctx.payment.getAmount(),
+                ctx.auditLog.getIdempotencyKey());
+    }
+
+    private void completeRefund(ReconciliationContext ctx, RefundResponse response) {
+        completeRefund(ctx.auditLog, ctx.booking, response);
+    }
+
+    private void handlePermanentFailure(AdminAuditLog auditLog, Exception e) {
+        log.error("Permanent error reconciling log ID: {}", auditLog.getId(), e);
+        if (auditLog.getBooking() != null) {
             bookingRepository.findByIdWithLock(auditLog.getBooking().getId())
                     .ifPresent(booking -> markAsPermanentFailure(
                             auditLog, booking, "Permanent reconciliation failure: " + e.getMessage()));
-
-            alertAdmin(auditLog, "Refund Reconciliation Permanently Failed",
-                    "Manual intervention required.\n" +
-                            "Audit Log ID: " + auditLog.getId() + "\n" +
-                            "Booking ID: " + auditLog.getBooking().getId() + "\n" +
-                            "Error: " + e.getMessage());
-        } catch (TicketLedgerException e) {
-            log.error("Error reconciling log ID: {}", auditLog.getId(), e);
-
-            bookingRepository.findByIdWithLock(auditLog.getBooking().getId())
-                    .ifPresent(booking -> markAsFailed(auditLog, booking, "Reconciliation failed: " + e.getMessage()));
-
-            alertAdmin(auditLog, "Refund Reconciliation FAILED",
-                    "Manual intervention required.\n" +
-                            "Audit Log ID: " + auditLog.getId() + "\n" +
-                            "Booking ID: " + auditLog.getBooking().getId() + "\n" +
-                            "Error: " + e.getMessage());
-        } catch (Exception e) {
-            log.error("Error reconciling log ID: " + auditLog.getId(), e);
-
-            // Fetch booking to revert state
-            bookingRepository.findByIdWithLock(auditLog.getBooking().getId())
-                    .ifPresent(booking -> markAsFailed(auditLog, booking, "Reconciliation failed: " + e.getMessage()));
-
-            alertAdmin(auditLog, "Refund Reconciliation FAILED",
-                    "Manual intervention required.\n" +
-                            "Audit Log ID: " + auditLog.getId() + "\n" +
-                            "Booking ID: " + auditLog.getBooking().getId() + "\n" +
-                            "Error: " + e.getMessage());
         }
+        alertAdmin(auditLog, "Refund Reconciliation Permanently Failed", 
+                   "Manual intervention required.\nError: " + e.getMessage());
+    }
+
+    private void handleRetryableFailure(AdminAuditLog auditLog, Exception e) {
+         log.error("Retryable/Business error reconciling log ID: {}", auditLog.getId(), e);
+         // Mark as failed in audit log but Booking stays CONFIRMED (reverted state)
+         if (auditLog.getBooking() != null) {
+             bookingRepository.findByIdWithLock(auditLog.getBooking().getId())
+                    .ifPresent(booking -> markAsFailed(auditLog, booking, "Reconciliation failed: " + e.getMessage()));
+         }
+         alertAdmin(auditLog, "Refund Reconciliation FAILED", 
+                    "Manual intervention required.\nError: " + e.getMessage());
+    }
+
+    private void handleUnknownFailure(AdminAuditLog auditLog, Exception e) {
+        log.error("Unknown error reconciling log ID: {}", auditLog.getId(), e);
+        if (auditLog.getBooking() != null) {
+             bookingRepository.findByIdWithLock(auditLog.getBooking().getId())
+                    .ifPresent(booking -> markAsFailed(auditLog, booking, "Reconciliation failed: " + e.getMessage()));
+        }
+        alertAdmin(auditLog, "Refund Reconciliation FAILED", 
+                   "Manual intervention required.\nError: " + e.getMessage());
     }
 
     /**
@@ -194,7 +206,7 @@ public class AdminReconciliationScheduler {
         String originalReason = auditLog.getReason();
 
         // 1. Update Booking to REFUNDED
-        booking.setStatus(BookingStatus.REFUNDED);
+        booking.transitionTo(BookingStatus.REFUNDED);
         bookingRepository.save(booking);
 
         // 2. Release all seats back to AVAILABLE
@@ -226,7 +238,7 @@ public class AdminReconciliationScheduler {
      */
     private void markAsFailed(AdminAuditLog auditLog, Booking booking, String reason) {
         // 1. Revert Booking to CONFIRMED (user can still use it)
-        booking.setStatus(BookingStatus.CONFIRMED);
+        booking.transitionTo(BookingStatus.CONFIRMED);
         bookingRepository.save(booking);
 
         // 2. Mark Audit Log as FAILED
@@ -242,7 +254,7 @@ public class AdminReconciliationScheduler {
      * manual intervention.
      */
     private void markAsPermanentFailure(AdminAuditLog auditLog, Booking booking, String reason) {
-        booking.setStatus(BookingStatus.REFUND_FAILED);
+        booking.transitionTo(BookingStatus.REFUND_FAILED);
         bookingRepository.save(booking);
 
         auditLog.setStatus(AdminLogStatus.PERMANENT_FAILURE);

@@ -1,4 +1,4 @@
-package com.ticketledger.service.impl;
+package com.ticketledger.service;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -11,11 +11,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ticketledger.config.BookingProperties;
 import com.ticketledger.domain.entity.IdempotencyKey;
 import com.ticketledger.domain.repository.IdempotencyKeyRepository;
 import com.ticketledger.exception.BusinessException;
 import com.ticketledger.exception.domain.IdempotencyConflictException;
-import com.ticketledger.service.IdempotencyService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,12 +24,10 @@ import tools.jackson.databind.JsonNode;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class IdempotencyServiceImpl implements IdempotencyService {
+public class IdempotencyService {
     private final IdempotencyKeyRepository repository;
+    private final BookingProperties bookingProperties;
 
-    private static final int DEFAULT_EXPIRATION_HOURS = 24;
-
-    @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean lock(UUID key, UUID userId, String requestHash) {
         var existingOpt = repository.findById(key);
@@ -43,7 +41,7 @@ public class IdempotencyServiceImpl implements IdempotencyService {
             newKey.setId(key);
             newKey.setUserId(userId);
             newKey.setRequestHash(requestHash);
-            newKey.setExpiresAt(Instant.now().plus(DEFAULT_EXPIRATION_HOURS, ChronoUnit.HOURS));
+            newKey.setExpiresAt(Instant.now().plus(bookingProperties.idempotencyExpirationHours(), ChronoUnit.HOURS));
             repository.saveAndFlush(newKey);
 
             return true;
@@ -61,12 +59,10 @@ public class IdempotencyServiceImpl implements IdempotencyService {
         }
     }
 
-    @Override
     public Optional<IdempotencyKey> findKey(UUID key) {
         return repository.findById(key);
     }
 
-    @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void saveResponse(UUID key, int status, JsonNode body) {
         var existingKeyOpt = repository.findById(key)

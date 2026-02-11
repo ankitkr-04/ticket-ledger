@@ -27,7 +27,7 @@ import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.context.jdbc.Sql;
 import org.testcontainers.utility.TestcontainersConfiguration;
 
-import com.ticketledger.constant.SecurityConstant;
+import com.ticketledger.config.AdminProperties;
 import com.ticketledger.domain.entity.AdminAuditLog;
 import com.ticketledger.domain.entity.Booking;
 import com.ticketledger.domain.entity.BookingSeat;
@@ -37,6 +37,7 @@ import com.ticketledger.domain.entity.Showtime;
 import com.ticketledger.domain.entity.User;
 import com.ticketledger.domain.enums.AdminLogAction;
 import com.ticketledger.domain.enums.BookingStatus;
+import com.ticketledger.domain.enums.GatewayStatus;
 import com.ticketledger.domain.enums.PaymentProvider;
 import com.ticketledger.domain.enums.PaymentStatus;
 import com.ticketledger.domain.enums.SeatStatus;
@@ -50,7 +51,7 @@ import com.ticketledger.domain.repository.SeatRepository;
 import com.ticketledger.domain.repository.ShowtimeRepository;
 import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.dto.RefundResponse;
-import com.ticketledger.service.booking.BookingService;
+import com.ticketledger.service.booking.SeatReclamationService;
 import com.ticketledger.service.gateway.PaymentGateway;
 import com.ticketledger.service.scheduler.BookingCleanupScheduler;
 
@@ -66,7 +67,7 @@ class BookingReclamationIntegrationTest {
     private static final UUID RECLAMATION_SEAT_2_ID = UUID.fromString("88888888-8888-8888-8888-888888888882");
 
     @Autowired
-    private BookingService bookingService;
+    private SeatReclamationService seatReclamationService;
 
     @Autowired
     private BookingCleanupScheduler bookingCleanupScheduler;
@@ -98,6 +99,9 @@ class BookingReclamationIntegrationTest {
     @MockitoBean
     private PaymentGateway paymentGateway;
 
+    @Autowired
+    private AdminProperties adminProperties;
+
     @Test
     @Sql(scripts = "/sql/seed_test_data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
     @Sql(scripts = "/sql/clean_test_data.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
@@ -106,11 +110,11 @@ class BookingReclamationIntegrationTest {
         when(paymentGateway.refundPayment(anyString(), any(BigDecimal.class), anyString()))
                 .thenReturn(new RefundResponse(
                         "reclaim_ref_123",
-                        "SUCCEEDED",
+                        GatewayStatus.SUCCEEDED,
                         fixture.user2Payment().getAmount(),
                         "{}"));
 
-        bookingService.reclaimSeatForLatePayment(fixture.user1Booking().getId());
+        seatReclamationService.reclaimOrBumpSeats(fixture.user1Booking().getId());
 
         Booking user1 = bookingRepository.findById(fixture.user1Booking().getId()).orElseThrow();
         Booking user2 = bookingRepository.findById(fixture.user2Booking().getId()).orElseThrow();
@@ -119,7 +123,7 @@ class BookingReclamationIntegrationTest {
 
         assertThat(user1.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
         assertThat(user2.getStatus()).isEqualTo(BookingStatus.SYSTEM_CANCELLED);
-        assertThat(user2.getBumpedByBookingId()).isEqualTo(user1.getId());
+        assertThat(user2.getDisplacedByBookingId()).isEqualTo(user1.getId());
         assertThat(user2.getSystemCancellationReason()).isNotBlank();
         assertThat(seat1.getStatus()).isEqualTo(SeatStatus.SOLD);
         assertThat(seat2.getStatus()).isEqualTo(SeatStatus.SOLD);
@@ -128,7 +132,7 @@ class BookingReclamationIntegrationTest {
                 .filter(log -> log.getAction() == AdminLogAction.AUTO_RECLAMATION_CONFLICT)
                 .findFirst()
                 .orElseThrow();
-        assertThat(conflictAudit.getAdminUser().getId()).isEqualTo(SecurityConstant.SYSTEM_ADMIN_ID);
+        assertThat(conflictAudit.getAdminUser().getId()).isEqualTo(adminProperties.systemUserId());
 
         assertThat(applicationEvents.stream(BookingRefundEvent.class).count()).isGreaterThanOrEqualTo(1);
 
@@ -148,7 +152,7 @@ class BookingReclamationIntegrationTest {
         when(paymentGateway.refundPayment(anyString(), any(BigDecimal.class), anyString()))
                 .thenThrow(new RuntimeException("Gateway down"));
 
-        bookingService.reclaimSeatForLatePayment(fixture.user1Booking().getId());
+        seatReclamationService.reclaimOrBumpSeats(fixture.user1Booking().getId());
 
         Awaitility.await().untilAsserted(() -> {
             Booking bumped = bookingRepository.findById(fixture.user2Booking().getId()).orElseThrow();
@@ -161,7 +165,7 @@ class BookingReclamationIntegrationTest {
                     .toList();
             assertThat(failureLogs).isNotEmpty();
             assertThat(failureLogs).anySatisfy(
-                    log -> assertThat(log.getAdminUser().getId()).isEqualTo(SecurityConstant.SYSTEM_ADMIN_ID));
+                    log -> assertThat(log.getAdminUser().getId()).isEqualTo(adminProperties.systemUserId()));
         });
     }
 
@@ -171,7 +175,7 @@ class BookingReclamationIntegrationTest {
     void cleanup_shouldSkipHeldBookingsInsideThirtySecondSafetyBuffer() {
         Booking booking = createHeldBookingForCleanup(Instant.now().minusSeconds(10), true);
 
-        bookingCleanupScheduler.cleanupExpiredBookings();
+        bookingCleanupScheduler.cleanupAndVerifyExpiredBookings();
 
         Booking refreshed = bookingRepository.findById(booking.getId()).orElseThrow();
         assertThat(refreshed.getStatus()).isEqualTo(BookingStatus.HELD);
@@ -184,7 +188,7 @@ class BookingReclamationIntegrationTest {
     void cleanup_shouldExpireAbandonedBookingWithoutGatewayVerification() {
         Booking booking = createHeldBookingForCleanup(Instant.now().minusSeconds(120), false);
 
-        bookingCleanupScheduler.cleanupExpiredBookings();
+        bookingCleanupScheduler.cleanupAndVerifyExpiredBookings();
 
         Booking refreshedBooking = bookingRepository.findById(booking.getId()).orElseThrow();
         Seat refreshedSeat = seatRepository.findById(RECLAMATION_SEAT_1_ID).orElseThrow();
@@ -203,7 +207,7 @@ class BookingReclamationIntegrationTest {
         Booking booking = createHeldBookingForCleanup(Instant.now().minusSeconds(120), true);
         when(paymentGateway.verifyPaymentStatus("pi_cleanup_pending")).thenReturn(PaymentStatus.SUCCESS);
 
-        bookingCleanupScheduler.cleanupExpiredBookings();
+        bookingCleanupScheduler.cleanupAndVerifyExpiredBookings();
 
         Booking refreshedBooking = bookingRepository.findById(booking.getId()).orElseThrow();
         Seat refreshedSeat = seatRepository.findById(RECLAMATION_SEAT_1_ID).orElseThrow();
@@ -220,7 +224,7 @@ class BookingReclamationIntegrationTest {
         Booking booking = createHeldBookingForCleanup(Instant.now().minusSeconds(120), true);
         when(paymentGateway.verifyPaymentStatus("pi_cleanup_pending")).thenReturn(PaymentStatus.FAILED);
 
-        bookingCleanupScheduler.cleanupExpiredBookings();
+        bookingCleanupScheduler.cleanupAndVerifyExpiredBookings();
 
         Booking refreshedBooking = bookingRepository.findById(booking.getId()).orElseThrow();
         Seat refreshedSeat = seatRepository.findById(RECLAMATION_SEAT_1_ID).orElseThrow();
@@ -239,7 +243,7 @@ class BookingReclamationIntegrationTest {
         Booking booking = createHeldBookingForCleanup(Instant.now().minusSeconds(120), true);
         when(paymentGateway.verifyPaymentStatus("pi_cleanup_pending")).thenReturn(PaymentStatus.PENDING);
 
-        bookingCleanupScheduler.cleanupExpiredBookings();
+        bookingCleanupScheduler.cleanupAndVerifyExpiredBookings();
 
         Booking refreshedBooking = bookingRepository.findById(booking.getId()).orElseThrow();
         Seat refreshedSeat = seatRepository.findById(RECLAMATION_SEAT_1_ID).orElseThrow();
@@ -259,18 +263,18 @@ class BookingReclamationIntegrationTest {
         when(paymentGateway.refundPayment(anyString(), any(BigDecimal.class), anyString()))
                 .thenReturn(new RefundResponse(
                         "reclaim_ref_multi",
-                        "SUCCEEDED",
+                        GatewayStatus.SUCCEEDED,
                         fixture.user2Payment().getAmount(),
                         "{}"));
 
-        bookingService.reclaimSeatForLatePayment(fixture.user1Booking().getId());
+        seatReclamationService.reclaimOrBumpSeats(fixture.user1Booking().getId());
 
         Booking user2 = bookingRepository.findById(fixture.user2Booking().getId()).orElseThrow();
         Booking user3 = bookingRepository.findById(fixture.user3Booking().getId()).orElseThrow();
         assertThat(user2.getStatus()).isEqualTo(BookingStatus.SYSTEM_CANCELLED);
         assertThat(user3.getStatus()).isEqualTo(BookingStatus.SYSTEM_CANCELLED);
-        assertThat(user2.getBumpedByBookingId()).isEqualTo(fixture.user1Booking().getId());
-        assertThat(user3.getBumpedByBookingId()).isEqualTo(fixture.user1Booking().getId());
+        assertThat(user2.getDisplacedByBookingId()).isEqualTo(fixture.user1Booking().getId());
+        assertThat(user3.getDisplacedByBookingId()).isEqualTo(fixture.user1Booking().getId());
 
         Awaitility.await().untilAsserted(() -> {
             Payment user2Payment = paymentRepository.findById(fixture.user2Payment().getId()).orElseThrow();
@@ -294,12 +298,12 @@ class BookingReclamationIntegrationTest {
         when(paymentGateway.refundPayment(anyString(), any(BigDecimal.class), anyString()))
                 .thenReturn(new RefundResponse(
                         "reclaim_ref_retry",
-                        "SUCCEEDED",
+                        GatewayStatus.SUCCEEDED,
                         fixture.user2Payment().getAmount(),
                         "{}"));
 
-        bookingService.reclaimSeatForLatePayment(fixture.user1Booking().getId());
-        bookingService.reclaimSeatForLatePayment(fixture.user1Booking().getId());
+        seatReclamationService.reclaimOrBumpSeats(fixture.user1Booking().getId());
+        seatReclamationService.reclaimOrBumpSeats(fixture.user1Booking().getId());
 
         Awaitility.await().untilAsserted(() -> {
             Payment bumpedPayment = paymentRepository.findById(fixture.user2Payment().getId()).orElseThrow();

@@ -65,6 +65,8 @@ booking:
   default-base-price: 10.00
   currency: INR
   cleanup-interval-ms: 60000 # 1 minute
+  cleanup-safety-buffer-seconds: 30
+  idempotency-expiration-hours: 24
 
 ticketledger:
   payment:

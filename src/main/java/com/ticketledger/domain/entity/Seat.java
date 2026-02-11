@@ -41,5 +41,6 @@ public class Seat extends BaseEntity {
     private SeatStatus status = SeatStatus.AVAILABLE;
 
     @Version
-    private int version;
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
 }

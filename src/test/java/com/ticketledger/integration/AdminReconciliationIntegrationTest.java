@@ -34,6 +34,7 @@ import com.ticketledger.domain.entity.User;
 import com.ticketledger.domain.enums.AdminLogAction;
 import com.ticketledger.domain.enums.AdminLogStatus;
 import com.ticketledger.domain.enums.BookingStatus;
+import com.ticketledger.domain.enums.GatewayStatus;
 import com.ticketledger.domain.enums.PaymentProvider;
 import com.ticketledger.domain.enums.PaymentStatus;
 import com.ticketledger.domain.enums.SeatStatus;
@@ -97,7 +98,7 @@ class AdminReconciliationIntegrationTest {
         void reconcile_stuckInitiatedLog_successfulGateway_shouldCompleteAndPublishEvent() {
                 TestFixture fixture = createStuckRefundFixture();
                 when(paymentGateway.refundPayment(anyString(), any(BigDecimal.class), anyString()))
-                                .thenReturn(new RefundResponse("re_test_123", "SUCCEEDED",
+                                .thenReturn(new RefundResponse("re_test_123", GatewayStatus.SUCCEEDED,
                                                 fixture.payment().getAmount(), "{}"));
 
                 boolean processed = scheduler.processNextStuckJob(Instant.now().plusSeconds(5));

@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
 
 import com.ticketledger.annotation.BusinessMetric;
 import com.ticketledger.constant.ErrorCodeConstant;
-import com.ticketledger.exception.TicketLedgerException;
-import com.ticketledger.service.context.RequestContext;
+import com.ticketledger.exception.ApplicationException;
+import com.ticketledger.service.context.BookingRequestContext;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
@@ -23,13 +23,13 @@ import lombok.RequiredArgsConstructor;
 @Aspect
 @Component
 @RequiredArgsConstructor
-public class MetricAspect {
+public class BusinessMetricAspect {
     private static final String STATUS_SUCCESS = "success";
     private static final String STATUS_FAILURE = "failure";
     private static final String REASON_NONE = "none";
 
     private final MeterRegistry meterRegistry;
-    private final RequestContext requestContext;
+    private final BookingRequestContext requestContext;
     private final ThreadLocal<Deque<MetricInvocation>> invocationStack = ThreadLocal.withInitial(ArrayDeque::new);
 
     @Before("@annotation(businessMetric)")
@@ -84,7 +84,7 @@ public class MetricAspect {
     }
 
     private String extractReason(Throwable throwable) {
-        if (throwable instanceof TicketLedgerException ticketLedgerException) {
+        if (throwable instanceof ApplicationException ticketLedgerException) {
             return ticketLedgerException.getErrorCode();
         }
         return ErrorCodeConstant.INTERNAL_ERROR;

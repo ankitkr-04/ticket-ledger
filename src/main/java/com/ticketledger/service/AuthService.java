@@ -1,4 +1,4 @@
-package com.ticketledger.service.impl;
+package com.ticketledger.service;
 
 import java.time.Instant;
 
@@ -22,14 +22,13 @@ import com.ticketledger.dto.RefreshTokenRequest;
 import com.ticketledger.dto.RegisterRequest;
 import com.ticketledger.exception.BusinessException;
 import com.ticketledger.security.JwtService;
-import com.ticketledger.service.AuthService;
 import com.ticketledger.util.CryptoUtil;
 
 import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-public class AuthServiceImpl implements AuthService {
+public class AuthService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -38,7 +37,6 @@ public class AuthServiceImpl implements AuthService {
     private final JwtProperties jwtProperties;
     private final PasswordEncoder passwordEncoder;
 
-    @Override
     @Transactional
     public AuthResponse login(LoginRequest request) {
         // 1. Authenticate (Checks password)
@@ -60,7 +58,6 @@ public class AuthServiceImpl implements AuthService {
                 jwtProperties.accessTokenExpiration());
     }
 
-    @Override
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (request.getRole() == UserRole.OWNER) {
@@ -107,7 +104,6 @@ public class AuthServiceImpl implements AuthService {
                 jwtProperties.accessTokenExpiration());
     }
 
-    @Override
     @Transactional
     public AuthResponse refresh(RefreshTokenRequest request) {
         String incomingToken = request.refreshToken();
@@ -154,7 +150,6 @@ public class AuthServiceImpl implements AuthService {
         return refreshTokenRepository.save(token);
     }
 
-    @Override
     @Transactional
     public void logout(String email) {
         var user = userRepository.findByEmail(email)

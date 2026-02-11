@@ -73,7 +73,7 @@ public class BookingRefundListener {
     private void handleRefundFailure(UUID bookingId, String error) {
         // Architecture 010: Transition to REFUND_REQUIRED_MANUAL for Admin visibility
         bookingRepository.findById(bookingId).ifPresent(booking -> {
-            booking.setStatus(BookingStatus.REFUND_REQUIRED_MANUAL);
+            booking.transitionTo(BookingStatus.REFUND_REQUIRED_MANUAL);
             bookingRepository.save(booking);
 
             // Create "Financial Debt" audit entry

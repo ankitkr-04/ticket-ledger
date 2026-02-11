@@ -8,12 +8,12 @@ import org.springframework.http.HttpStatus;
 import lombok.Getter;
 
 @Getter
-public abstract class TicketLedgerException extends RuntimeException {
+public abstract class ApplicationException extends RuntimeException {
     private final String errorCode;
     private final HttpStatus status;
     private final Map<String, Object> context;
 
-    protected TicketLedgerException(String message, String errorCode, HttpStatus status, Map<String, Object> context) {
+    protected ApplicationException(String message, String errorCode, HttpStatus status, Map<String, Object> context) {
         super(message);
         this.errorCode = errorCode;
         this.status = status;

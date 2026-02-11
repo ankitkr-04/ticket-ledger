@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 import com.ticketledger.constant.ErrorCodeConstant;
 import com.ticketledger.dto.ApiResponse;
-import com.ticketledger.service.context.RequestContext;
+import com.ticketledger.service.context.BookingRequestContext;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,7 +23,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
     private final JsonMapper jsonMapper;
-    private final RequestContext requestContext;
+    private final BookingRequestContext requestContext;
 
     @Override
     public void commence(

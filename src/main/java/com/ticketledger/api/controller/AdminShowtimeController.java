@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ticketledger.constant.ErrorCodeConstant;
 import com.ticketledger.constant.ErrorMessageConstant;
-import com.ticketledger.constant.HttpHeaderConstant;
 import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.domain.enums.ShowtimeStatus;
 import com.ticketledger.dto.ApiResponse;
@@ -23,7 +22,7 @@ import com.ticketledger.dto.UpdateShowtimeStatusRequest;
 import com.ticketledger.exception.BusinessException;
 import com.ticketledger.service.AdminAuthorizationService;
 import com.ticketledger.service.ShowtimeService;
-import com.ticketledger.service.context.RequestContext;
+import com.ticketledger.service.context.BookingRequestContext;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -37,14 +36,14 @@ public class AdminShowtimeController {
 
     private final ShowtimeService showtimeService;
     private final AdminAuthorizationService adminAuthorizationService;
-    private final RequestContext requestContext;
+    private final BookingRequestContext requestContext;
 
     @PatchMapping("/{showtimeId}/status")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<ShowtimePauseResponse>> updateShowtimeStatus(
             @PathVariable UUID showtimeId,
             @Valid @RequestBody UpdateShowtimeStatusRequest request,
-            @RequestHeader(HttpHeaderConstant.IDEMPOTENCY_KEY) String idempotencyKey) {
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         validateStatusRequest(request.status());
         UUID adminId = adminAuthorizationService.assertShowtimeAccess(showtimeId);

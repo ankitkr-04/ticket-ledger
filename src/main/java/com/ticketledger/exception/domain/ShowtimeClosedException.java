@@ -6,9 +6,9 @@ import org.springframework.http.HttpStatus;
 
 import com.ticketledger.constant.ErrorCodeConstant;
 import com.ticketledger.domain.enums.ShowtimeStatus;
-import com.ticketledger.exception.TicketLedgerException;
+import com.ticketledger.exception.ApplicationException;
 
-public class ShowtimeClosedException extends TicketLedgerException {
+public class ShowtimeClosedException extends ApplicationException {
     public ShowtimeClosedException(ShowtimeStatus status) {
         super(
                 "Showtime is not active",

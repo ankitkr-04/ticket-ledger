@@ -13,9 +13,9 @@ import lombok.RequiredArgsConstructor;
 @Component
 @RequestScope
 @RequiredArgsConstructor
-public class RequestContext {
+public class BookingRequestContext {
 
-    private static final String GLOBAL_THEATER_TAG = "--global";
+    private static final String GLOBAL_THEATER_TAG = "global";
 
     private final ObjectProvider<Tracer> tracerProvider;
     private UUID theaterId;

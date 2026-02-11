@@ -1,6 +1,6 @@
 package com.ticketledger.util;
 
-import com.ticketledger.exception.TicketLedgerException;
+import com.ticketledger.exception.ApplicationException;
 import com.ticketledger.security.AuthenticatedUser;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -19,7 +19,7 @@ public class SecurityUtil {
         if (authentication == null || !authentication.isAuthenticated() 
             || !(authentication.getPrincipal() instanceof AuthenticatedUser)) {
             // This implies a configuration error or an unauthorized request reaching a protected service
-            throw new TicketLedgerException("No authenticated user found in SecurityContext", 
+            throw new ApplicationException("No authenticated user found in SecurityContext", 
                 "INTERNAL_SECURITY_ERROR", HttpStatus.INTERNAL_SERVER_ERROR, Map.of()) {
             };
         }

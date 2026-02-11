@@ -1,10 +1,11 @@
-package com.ticketledger.service.booking.impl;
+package com.ticketledger.service.booking;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -20,7 +21,7 @@ import com.ticketledger.domain.enums.BookingStatus;
 import com.ticketledger.domain.enums.PaymentStatus;
 import com.ticketledger.domain.enums.SeatStatus;
 import com.ticketledger.domain.event.BookingConfirmedEvent;
-import com.ticketledger.domain.event.BookingRefundEvent;
+
 import com.ticketledger.domain.repository.BookingRepository;
 import com.ticketledger.domain.repository.BookingSeatRepository;
 import com.ticketledger.domain.repository.PaymentRepository;
@@ -39,6 +40,7 @@ public class BookingPaymentService {
     private final BookingSeatRepository bookingSeatRepository;
     private final SeatRepository seatRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final SeatReclamationService seatReclamationService;
 
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public void processPaymentWebhook(PaymentWebhookRequest request) {
@@ -79,7 +81,7 @@ public class BookingPaymentService {
     }
 
     private void confirmBooking(Booking booking) {
-        booking.setStatus(BookingStatus.CONFIRMED);
+        booking.transitionTo(BookingStatus.CONFIRMED);
         bookingRepository.save(booking);
 
         List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(booking.getId());
@@ -98,38 +100,6 @@ public class BookingPaymentService {
     }
 
     private void handleExpiredBookingLatePayment(Booking booking, Payment payment) {
-        List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(booking.getId());
-        List<UUID> seatIds = bookingSeats.stream()
-                .map(bs -> bs.getSeat().getId())
-                .sorted()
-                .toList();
-
-        List<Seat> lockedSeats = seatRepository.lockSeats(seatIds);
-        boolean allAvailable = lockedSeats.stream().allMatch(seat -> seat.getStatus() == SeatStatus.AVAILABLE);
-
-        if (allAvailable) {
-            lockedSeats.forEach(seat -> {
-                seat.setStatus(SeatStatus.SOLD);
-                seatRepository.save(seat);
-            });
-            booking.setStatus(BookingStatus.CONFIRMED);
-            bookingRepository.save(booking);
-
-            eventPublisher.publishEvent(new BookingConfirmedEvent(
-                    booking.getId(),
-                    booking.getUser().getEmail(),
-                    payment.getAmount(),
-                    Instant.now()));
-        } else {
-            booking.setStatus(BookingStatus.REFUND_REQUIRED);
-            bookingRepository.save(booking);
-
-            eventPublisher.publishEvent(new BookingRefundEvent(
-                    booking.getId(),
-                    booking.getUser().getEmail(),
-                    payment.getAmount(),
-                    "Seats expired and were re-booked by another user.",
-                    Instant.now()));
-        }
+        seatReclamationService.reclaimOrBumpSeats(booking.getId());
     }
 }

@@ -2,17 +2,20 @@
 package com.ticketledger.service.scheduler;
 
 import java.time.Instant;
+import java.util.List;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.ticketledger.config.BookingProperties;
 import com.ticketledger.domain.entity.Booking;
 import com.ticketledger.domain.enums.BookingStatus;
 import com.ticketledger.domain.enums.PaymentStatus;
 import com.ticketledger.domain.repository.BookingRepository;
 import com.ticketledger.domain.repository.PaymentRepository;
-import com.ticketledger.service.booking.BookingService;
+import com.ticketledger.service.booking.BookingExpirationService;
+import com.ticketledger.service.booking.SeatReclamationService;
 import com.ticketledger.service.gateway.PaymentGateway;
 
 import lombok.RequiredArgsConstructor;
@@ -23,33 +26,38 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 @RequiredArgsConstructor
 @Slf4j
 public class BookingCleanupScheduler {
-    private final BookingService bookingService;
+    private final BookingProperties bookingProperties;
+    private final BookingExpirationService bookingExpirationService;
+    private final SeatReclamationService seatReclamationService;
     private final BookingRepository bookingRepository;
     private final PaymentRepository paymentRepository;
     private final PaymentGateway paymentGateway;
 
     @Scheduled(fixedDelayString = "${booking.cleanup-interval-ms:60000}")
-    @SchedulerLock(name = "BookingCleanupScheduler_cleanupExpiredBookings", lockAtLeastFor = "${booking.cleanup.lock-at-least-for:PT30S}", lockAtMostFor = "${booking.cleanup.lock-at-most-for:PT10M}")
-    public void cleanupExpiredBookings() {
-        // Architecture 010: 30-second safety buffer for clock drift/gateway lag
-        Instant safetyThreshold = Instant.now().minusSeconds(30);
+    @SchedulerLock(name = "BookingCleanupScheduler_cleanupAndVerifyExpiredBookings", lockAtLeastFor = "${booking.cleanup.lock-at-least-for:PT30S}", lockAtMostFor = "${booking.cleanup.lock-at-most-for:PT10M}")
+    public void cleanupAndVerifyExpiredBookings() {
+        Instant threshold = Instant.now().minusSeconds(bookingProperties.cleanupSafetyBufferSeconds());
+        int pageSize = 50;
+        int totalProcessed = 0;
 
-        var candidateBookings = bookingRepository.findByStatusAndLockedUntilBefore(
-                BookingStatus.HELD,
-                safetyThreshold,
-                PageRequest.of(0, 50));
-
-        if (candidateBookings.isEmpty())
-            return;
-
-        log.info("Processing {} cleanup candidates...", candidateBookings.size());
-
-        for (var booking : candidateBookings) {
-            try {
-                processCleanup(booking);
-            } catch (Exception e) {
-                log.error("Cleanup failed for booking {}: {}", booking.getId(), e.getMessage());
+        // Process ALL pages — always re-query page 0 since processed bookings
+        // change status and drop out of the result set.
+        List<Booking> batch;
+        do {
+            batch = bookingRepository.findByStatusAndLockedUntilBefore(
+                    BookingStatus.HELD, threshold, PageRequest.of(0, pageSize));
+            for (Booking booking : batch) {
+                try {
+                    processCleanup(booking);
+                    totalProcessed++;
+                } catch (Exception e) {
+                    log.error("Cleanup failed for booking {}: {}", booking.getId(), e.getMessage());
+                }
             }
+        } while (!batch.isEmpty());
+
+        if (totalProcessed > 0) {
+            log.info("Cleanup processed {} expired bookings", totalProcessed);
         }
     }
 
@@ -60,7 +68,7 @@ public class BookingCleanupScheduler {
         // Path A: FAST PATH - No gateway transaction ever started
         if (paymentOpt.isEmpty() || paymentOpt.get().getProviderTransactionId() == null) {
             log.info("Fast-path expiring abandoned booking: {}", booking.getId());
-            bookingService.expireBooking(booking.getId());
+            bookingExpirationService.expireBooking(booking.getId());
             return;
         }
 
@@ -71,11 +79,11 @@ public class BookingCleanupScheduler {
         switch (gatewayStatus) {
             case SUCCESS -> {
                 log.info("Late success detected for {}. Triggering reclamation (Bump).", booking.getId());
-                bookingService.reclaimSeatForLatePayment(booking.getId());
+                seatReclamationService.reclaimOrBumpSeats(booking.getId());
             }
             case FAILED -> {
                 log.info("Gateway confirmed failure for {}. Expiring hold.", booking.getId());
-                bookingService.expireBooking(booking.getId());
+                bookingExpirationService.expireBooking(booking.getId());
             }
             case PENDING -> {
                 // Do nothing. Wait for next run to give the user/webhook more time.

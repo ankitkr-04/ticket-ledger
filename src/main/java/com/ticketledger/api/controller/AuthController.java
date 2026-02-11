@@ -12,7 +12,7 @@ import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.dto.*;
 import com.ticketledger.security.AuthenticatedUser;
 import com.ticketledger.service.AuthService;
-import com.ticketledger.service.context.RequestContext;
+import com.ticketledger.service.context.BookingRequestContext;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +23,7 @@ import lombok.RequiredArgsConstructor;
 public class AuthController {
 
     private final AuthService authService;
-    private final RequestContext requestContext;
+    private final BookingRequestContext requestContext;
 
     /**
      * Authenticates a user and returns an Access Token + Refresh Token.

@@ -1,4 +1,4 @@
-package com.ticketledger.service.booking.impl;
+package com.ticketledger.service.booking;
 
 import java.time.Instant;
 import java.util.List;
@@ -43,7 +43,7 @@ public class BookingExpirationService {
             return;
         }
 
-        booking.setStatus(BookingStatus.EXPIRED);
+        booking.transitionTo(BookingStatus.EXPIRED);
         bookingRepository.save(booking);
 
         List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(booking.getId());

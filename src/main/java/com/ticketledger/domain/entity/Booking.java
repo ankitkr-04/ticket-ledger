@@ -48,8 +48,8 @@ public class Booking extends BaseEntity {
     @Column(name = "locked_until")
     private Instant lockedUntil;
 
-    @Column(name = "bumped_by_booking_id")
-    private UUID bumpedByBookingId;
+    @Column(name = "displaced_by_booking_id")
+    private UUID displacedByBookingId;
 
     @Column(name = "system_cancellation_reason")
     private String systemCancellationReason;
@@ -66,4 +66,18 @@ public class Booking extends BaseEntity {
     @Version
     @Column(name = "version", nullable = false)
     private Long version = 0L;
+
+    /**
+     * Transitions the booking to a new status, validating against the state machine.
+     *
+     * @param newStatus the target status
+     * @throws IllegalStateException if the transition is not allowed
+     */
+    public void transitionTo(BookingStatus newStatus) {
+        if (!this.status.canTransitionTo(newStatus)) {
+            throw new IllegalStateException(
+                    "Invalid booking status transition: " + this.status + " → " + newStatus);
+        }
+        this.status = newStatus;
+    }
 }

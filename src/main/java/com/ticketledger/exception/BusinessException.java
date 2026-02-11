@@ -4,7 +4,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 
-public class BusinessException extends TicketLedgerException {
+public class BusinessException extends ApplicationException {
     public BusinessException(String message, String errorCode, HttpStatus status, Map<String, Object> context) {
         super(message, errorCode, status, context);
     }

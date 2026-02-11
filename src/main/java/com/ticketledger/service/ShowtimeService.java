@@ -1,4 +1,4 @@
-package com.ticketledger.service.impl;
+package com.ticketledger.service;
 
 import java.util.List;
 import java.util.Map;
@@ -25,7 +25,6 @@ import com.ticketledger.dto.ShowtimePauseResponse;
 import com.ticketledger.exception.BusinessException;
 import com.ticketledger.exception.common.NotFoundException;
 import com.ticketledger.service.AdminAuditLogService;
-import com.ticketledger.service.ShowtimeService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class ShowtimeServiceImpl implements ShowtimeService {
+public class ShowtimeService {
 
     private final ShowtimeRepository showtimeRepository;
     private final BookingRepository bookingRepository;
@@ -41,7 +40,6 @@ public class ShowtimeServiceImpl implements ShowtimeService {
     private final BookingSeatRepository bookingSeatRepository;
     private final AdminAuditLogService adminAuditLogService;
 
-    @Override
     @Transactional(isolation = Isolation.REPEATABLE_READ)
     public ShowtimePauseResponse pauseShowtime(UUID showtimeId, String reason, UUID adminId, String idempotencyKey) {
         log.info("Pausing showtime: {}", showtimeId);
@@ -74,7 +72,7 @@ public class ShowtimeServiceImpl implements ShowtimeService {
         AtomicInteger seatsReleased = new AtomicInteger(0);
 
         for (Booking booking : heldBookings) {
-            booking.setStatus(BookingStatus.EXPIRED);
+            booking.transitionTo(BookingStatus.EXPIRED);
             bookingRepository.save(booking);
 
             // Release Seats

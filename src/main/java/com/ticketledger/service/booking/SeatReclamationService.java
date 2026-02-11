@@ -1,4 +1,4 @@
-package com.ticketledger.service.booking.impl;
+package com.ticketledger.service.booking;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -41,13 +41,12 @@ public class SeatReclamationService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
-    public void reclaimSeatForLatePayment(UUID lateBookingId) {
-        List<UUID> seatIds = bookingSeatRepository.findSeatIdsByBookingId(lateBookingId);
-
-        List<Seat> lockedSeats = seatRepository.findAllByIdInWithLock(seatIds);
-
+    public void reclaimOrBumpSeats(UUID lateBookingId) {
         Booking user1Booking = bookingRepository.findByIdWithLock(lateBookingId)
                 .orElseThrow(() -> new NotFoundException("Booking not found", Map.of("bookingId", lateBookingId)));
+
+        List<UUID> seatIds = bookingSeatRepository.findSeatIdsByBookingId(lateBookingId);
+        List<Seat> lockedSeats = seatRepository.findAllByIdInWithLock(seatIds);
 
         if (user1Booking.getStatus() == BookingStatus.CONFIRMED) {
             return;
@@ -74,7 +73,7 @@ public class SeatReclamationService {
             seat.setStatus(SeatStatus.SOLD);
             seatRepository.save(seat);
         });
-        user1Booking.setStatus(BookingStatus.CONFIRMED);
+        user1Booking.transitionTo(BookingStatus.CONFIRMED);
         bookingRepository.save(user1Booking);
 
         eventPublisher.publishEvent(new BookingConfirmedEvent(
@@ -90,8 +89,8 @@ public class SeatReclamationService {
     private void processReclamationBump(Booking user1Booking, List<Booking> conflictingBookings,
             List<Seat> lockedSeats) {
         conflictingBookings.forEach(conflict -> {
-            conflict.setStatus(BookingStatus.SYSTEM_CANCELLED);
-            conflict.setBumpedByBookingId(user1Booking.getId());
+            conflict.transitionTo(BookingStatus.SYSTEM_CANCELLED);
+            conflict.setDisplacedByBookingId(user1Booking.getId());
             conflict.setSystemCancellationReason(
                     "Seat reclaimed by original payer after late payment verification.");
             bookingRepository.save(conflict);
@@ -104,7 +103,7 @@ public class SeatReclamationService {
                     Instant.now()));
         });
 
-        user1Booking.setStatus(BookingStatus.CONFIRMED);
+        user1Booking.transitionTo(BookingStatus.CONFIRMED);
         bookingRepository.save(user1Booking);
 
         lockedSeats.forEach(seat -> {

@@ -23,7 +23,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import com.ticketledger.constant.ErrorCodeConstant;
 import com.ticketledger.constant.ErrorMessageConstant;
 import com.ticketledger.dto.ApiResponse;
-import com.ticketledger.service.context.RequestContext;
+import com.ticketledger.service.context.BookingRequestContext;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -34,10 +34,10 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
-    private final RequestContext requestContext;
+    private final BookingRequestContext requestContext;
 
-    @ExceptionHandler(TicketLedgerException.class)
-    public ResponseEntity<Object> handleTicketLedgerException(TicketLedgerException ex, HttpServletRequest request) {
+    @ExceptionHandler(ApplicationException.class)
+    public ResponseEntity<Object> handleApplicationException(ApplicationException ex, HttpServletRequest request) {
         log.warn("Business exception occurred: {}", ex.getMessage());
         return buildResponse(ex.getStatus(), ex.getErrorCode(), ex.getMessage(), ex.getContext());
     }

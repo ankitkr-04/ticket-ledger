@@ -11,7 +11,6 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.ticketledger.constant.HttpHeaderConstant;
 import com.ticketledger.constant.SecurityConstant;
 import com.ticketledger.security.JwtService;
 
@@ -36,7 +35,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain) throws ServletException, IOException {
 
-        final String authHeader = request.getHeader(HttpHeaderConstant.AUTHORIZATION);
+        final String authHeader = request.getHeader("Authorization");
         final String jwt;
         final String userEmail;
 

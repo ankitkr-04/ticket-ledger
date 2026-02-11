@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ticketledger.constant.RouteConstant;
 import com.ticketledger.dto.PaymentWebhookRequest;
-import com.ticketledger.service.booking.BookingService;
+import com.ticketledger.service.booking.BookingPaymentService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -16,13 +16,14 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping(RouteConstant.WEBHOOK_PATH)
 @RequiredArgsConstructor
 public class WebhookController {
-    private final BookingService bookingService;
+    private final BookingPaymentService bookingPaymentService;
 
     @PostMapping("/payment")
     public ResponseEntity<Void> handlePaymentWebhook(@RequestBody PaymentWebhookRequest request) {
 
-        bookingService.processPaymentWebhook(request);
+        bookingPaymentService.processPaymentWebhook(request);
         return ResponseEntity.ok().build();
     }
 
 }
+

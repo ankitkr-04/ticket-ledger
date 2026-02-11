@@ -5,7 +5,7 @@ import java.io.IOException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
-import com.ticketledger.service.context.RequestContext;
+import com.ticketledger.service.context.BookingRequestContext;
 
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
@@ -22,7 +22,7 @@ import lombok.RequiredArgsConstructor;
 public class TraceIdResponseFilter implements Filter {
 
     private final ObjectProvider<Tracer> tracerProvider;
-    private final RequestContext requestContext;
+    private final BookingRequestContext requestContext;
 
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)

@@ -1,4 +1,4 @@
-package com.ticketledger.service.impl;
+package com.ticketledger.service;
 
 import java.time.Instant;
 import java.util.Map;
@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ticketledger.constant.SecurityConstant;
+import com.ticketledger.config.AdminProperties;
 import com.ticketledger.domain.entity.AdminAuditLog;
 import com.ticketledger.domain.entity.Booking;
 import com.ticketledger.domain.entity.Showtime;
@@ -22,7 +22,6 @@ import com.ticketledger.domain.repository.ShowtimeRepository;
 import com.ticketledger.domain.repository.TheaterRepository;
 import com.ticketledger.domain.repository.UserRepository;
 import com.ticketledger.exception.common.NotFoundException;
-import com.ticketledger.service.AdminAuditLogService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,19 +29,19 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class AdminAuditLogServiceImpl implements AdminAuditLogService {
+public class AdminAuditLogService {
 
     private final AdminAuditLogRepository adminAuditLogRepository;
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
     private final ShowtimeRepository showtimeRepository;
     private final TheaterRepository theaterRepository;
+    private final AdminProperties adminProperties;
 
-    @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void logAction(UUID adminId, UUID bookingId, AdminLogAction action, AdminLogStatus status, String reason) {
         // 1. Resolve Actor (Default to System constant if null)
-        UUID actorId = (adminId != null) ? adminId : SecurityConstant.SYSTEM_ADMIN_ID;
+        UUID actorId = (adminId != null) ? adminId : adminProperties.systemUserId();
         User admin = userRepository.getReferenceById(actorId);
 
         // 2. Resolve Target Booking
@@ -70,7 +69,6 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
         adminAuditLogRepository.save(logEntry);
     }
 
-    @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AdminAuditLog createRefundLog(UUID bookingId, UUID adminId, String reason, String idempotencyKey) {
         Booking booking = bookingRepository.findById(bookingId)
@@ -93,7 +91,6 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
         return adminAuditLogRepository.save(logEntry);
     }
 
-    @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void completeLog(UUID logId, String providerRefundId) {
         AdminAuditLog logEntry = adminAuditLogRepository.findById(logId)
@@ -106,7 +103,6 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
         adminAuditLogRepository.save(logEntry);
     }
 
-    @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void failLog(UUID logId, String errorReason) {
         AdminAuditLog logEntry = adminAuditLogRepository.findById(logId)
@@ -118,7 +114,6 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
         adminAuditLogRepository.save(logEntry);
     }
 
-    @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AdminAuditLog createShowtimeLog(UUID showtimeId, UUID adminId, AdminLogAction action, String reason,
             String idempotencyKey) {
@@ -139,5 +134,9 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
         logEntry.setIdempotencyKey(idempotencyKey);
 
         return adminAuditLogRepository.save(logEntry);
+    }
+
+    public void logSystemAction(UUID bookingId, AdminLogAction action, AdminLogStatus status, String reason) {
+        logAction(adminProperties.systemUserId(), bookingId, action, status, reason);
     }
 }

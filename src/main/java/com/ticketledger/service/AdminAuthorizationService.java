@@ -1,4 +1,4 @@
-package com.ticketledger.service.impl;
+package com.ticketledger.service;
 
 import java.util.Map;
 import java.util.UUID;
@@ -14,8 +14,7 @@ import com.ticketledger.exception.common.NotFoundException;
 import com.ticketledger.exception.domain.ShowtimeNotFoundException;
 import com.ticketledger.exception.domain.TheaterAccessDeniedException;
 import com.ticketledger.security.AuthenticatedUser;
-import com.ticketledger.service.AdminAuthorizationService;
-import com.ticketledger.service.context.RequestContext;
+import com.ticketledger.service.context.BookingRequestContext;
 import com.ticketledger.util.SecurityUtil;
 
 import lombok.RequiredArgsConstructor;
@@ -24,13 +23,13 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class AdminAuthorizationServiceImpl implements AdminAuthorizationService {
+public class AdminAuthorizationService {
 
     private final AdminTheaterAccessRepository adminTheaterAccessRepository;
     private final ScreenRepository screenRepository;
     private final ShowtimeRepository showtimeRepository;
     private final BookingRepository bookingRepository;
-    private final RequestContext requestContext;
+    private final BookingRequestContext requestContext;
     // TheaterRepository is not strictly needed if we trust the IDs from child
     // entities,
     // but good for assertTheaterAccess existence check if we want to be strict
@@ -43,7 +42,6 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
     // So 403 is acceptable for theaterId check if we don't explicitly fetch the
     // theater.
 
-    @Override
     @Transactional(readOnly = true)
     public UUID assertTheaterAccess(UUID theaterId) {
         AuthenticatedUser user = SecurityUtil.getAuthenticatedUser();
@@ -58,7 +56,6 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
         return user.getId();
     }
 
-    @Override
     @Transactional(readOnly = true)
     public UUID assertScreenAccess(UUID screenId) {
         UUID theaterId = screenRepository.findTheaterIdById(screenId)
@@ -67,7 +64,6 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
         return assertTheaterAccess(theaterId);
     }
 
-    @Override
     @Transactional(readOnly = true)
     public UUID assertShowtimeAccess(UUID showtimeId) {
         UUID theaterId = showtimeRepository.findTheaterIdById(showtimeId)
@@ -76,7 +72,6 @@ public class AdminAuthorizationServiceImpl implements AdminAuthorizationService 
         return assertTheaterAccess(theaterId);
     }
 
-    @Override
     @Transactional(readOnly = true)
     public UUID assertBookingAccess(UUID bookingId) {
         UUID theaterId = bookingRepository.findTheaterIdById(bookingId)

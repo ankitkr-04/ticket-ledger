@@ -1,4 +1,4 @@
-package com.ticketledger.service.impl;
+package com.ticketledger.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,11 +40,11 @@ import com.ticketledger.exception.BusinessException;
 import com.ticketledger.security.JwtService;
 
 /**
- * Unit tests for {@link AuthServiceImpl}.
+ * Unit tests for {@link AuthService}.
  * Mocks all dependencies to test business logic in isolation.
  */
 @ExtendWith(MockitoExtension.class)
-class AuthServiceImplTest {
+class AuthServiceTest {
 
     @Mock
     private UserRepository userRepository;
@@ -65,7 +65,7 @@ class AuthServiceImplTest {
     private PasswordEncoder passwordEncoder;
 
     @InjectMocks
-    private AuthServiceImpl authService;
+    private AuthService authService;
 
     private User testUser;
     private RefreshToken testRefreshToken;

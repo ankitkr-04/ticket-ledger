@@ -1,4 +1,4 @@
-package com.ticketledger.service.booking.impl;
+package com.ticketledger.service.booking;
 
 import java.time.Instant;
 import java.util.List;
@@ -57,7 +57,7 @@ public class BookingRefundService {
                         HttpStatus.BAD_REQUEST);
             }
 
-            booking.setStatus(BookingStatus.REFUND_INITIATED);
+            booking.transitionTo(BookingStatus.REFUND_INITIATED);
             bookingRepository.save(booking);
 
             var log = adminAuditLogService.createRefundLog(bookingId, adminId, reason, idempotencyKey);
@@ -80,7 +80,7 @@ public class BookingRefundService {
         } catch (Exception e) {
             transactionTemplate.execute(status -> {
                 Booking booking = bookingRepository.findByIdWithLock(bookingId).orElseThrow();
-                booking.setStatus(BookingStatus.CONFIRMED);
+                booking.transitionTo(BookingStatus.CONFIRMED);
                 bookingRepository.save(booking);
 
                 adminAuditLogService.failLog(context.logId(), e.getMessage());
@@ -91,7 +91,7 @@ public class BookingRefundService {
 
         transactionTemplate.execute(status -> {
             Booking booking = bookingRepository.findByIdWithLock(bookingId).orElseThrow();
-            booking.setStatus(BookingStatus.REFUNDED);
+            booking.transitionTo(BookingStatus.REFUNDED);
             bookingRepository.save(booking);
 
             List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(bookingId);

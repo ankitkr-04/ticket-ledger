@@ -5,9 +5,9 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 
 import com.ticketledger.constant.ErrorCodeConstant;
-import com.ticketledger.exception.TicketLedgerException;
+import com.ticketledger.exception.ApplicationException;
 
-public class IdempotencyConflictException extends TicketLedgerException {
+public class IdempotencyConflictException extends ApplicationException {
     public IdempotencyConflictException(String requestHash, String storedHash) {
         super(
                 "Idempotency key reused with different payload",

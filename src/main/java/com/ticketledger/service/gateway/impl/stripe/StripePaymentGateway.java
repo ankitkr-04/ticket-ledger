@@ -14,7 +14,8 @@ import com.stripe.net.RequestOptions;
 import com.stripe.param.RefundCreateParams;
 import com.ticketledger.config.StripeProperties;
 import com.ticketledger.constant.ErrorCodeConstant;
-import com.ticketledger.constant.PaymentGatewayConstant;
+import com.ticketledger.constant.StripeErrorCode;
+import com.ticketledger.domain.enums.GatewayStatus;
 import com.ticketledger.domain.enums.PaymentStatus;
 import com.ticketledger.dto.RefundResponse;
 import com.ticketledger.exception.BusinessException;
@@ -54,7 +55,7 @@ public class StripePaymentGateway implements PaymentGateway {
 
             return new RefundResponse(
                     refund.getId(),
-                    refund.getStatus().toUpperCase(),
+                    GatewayStatus.fromStripeStatus(refund.getStatus()),
                     BigDecimal.valueOf(refund.getAmount() / 100.0),
                     refund.toJson());
         } catch (StripeException e) {
@@ -64,11 +65,11 @@ public class StripePaymentGateway implements PaymentGateway {
             String stripeCode = e.getStripeError() != null ? e.getStripeError().getCode() : null;
 
             // Already-refunded is idempotent success from our domain perspective.
-            if ("charge_already_refunded".equals(stripeCode)) {
+            if (StripeErrorCode.CHARGE_ALREADY_REFUNDED.equals(stripeCode)) {
                 log.info("Stripe charge already refunded for txn={}, treating as successful", providerTransactionId);
                 return new RefundResponse(
                         "already_refunded_" + providerTransactionId,
-                        PaymentGatewayConstant.STATUS_SUCCEEDED,
+                        GatewayStatus.SUCCEEDED,
                         amount,
                         "{\"status\":\"succeeded\",\"reason\":\"charge_already_refunded\"}");
             }
@@ -111,7 +112,7 @@ public class StripePaymentGateway implements PaymentGateway {
 
             // If Stripe explicitly says the ID doesn't exist, we can't confirm success.
             // We treat this as FAILED so the Reaper can reclaim the seat.
-            if ("resource_missing".equals(e.getStripeError() != null ? e.getStripeError().getCode() : null)) {
+            if (StripeErrorCode.RESOURCE_MISSING.equals(e.getStripeError() != null ? e.getStripeError().getCode() : null)) {
                 log.warn("Stripe transaction {} not found. Marking as FAILED for cleanup.", providerTransactionId);
                 return PaymentStatus.FAILED;
             }
@@ -139,15 +140,15 @@ public class StripePaymentGateway implements PaymentGateway {
 
             return new RefundResponse(
                     refund.getId(),
-                    refund.getStatus().toUpperCase(),
+                    GatewayStatus.fromStripeStatus(refund.getStatus()),
                     BigDecimal.valueOf(refund.getAmount() / 100.0),
                     refund.toJson());
 
         } catch (StripeException e) {
             log.error("Stripe refund fetch failed", e);
             if (e.getStatusCode() == 404) {
-                return new RefundResponse(null, PaymentGatewayConstant.STATUS_UNKNOWN, BigDecimal.ZERO,
-                        PaymentGatewayConstant.EMPTY_METADATA_JSON);
+                return new RefundResponse(null, GatewayStatus.UNKNOWN, BigDecimal.ZERO,
+                        "{}");
             }
             throw new BusinessException(
                     "Payment gateway error: " + e.getMessage(),

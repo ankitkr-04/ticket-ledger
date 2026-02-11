@@ -1,4 +1,4 @@
-package com.ticketledger.service.booking.impl;
+package com.ticketledger.service.booking;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -40,7 +40,7 @@ import com.ticketledger.exception.BusinessException;
 import com.ticketledger.exception.domain.SeatAlreadyBookedException;
 import com.ticketledger.exception.domain.ShowtimeNotFoundException;
 import com.ticketledger.service.IdempotencyService;
-import com.ticketledger.service.context.RequestContext;
+import com.ticketledger.service.context.BookingRequestContext;
 import com.ticketledger.util.CryptoUtil;
 
 import lombok.RequiredArgsConstructor;
@@ -63,45 +63,70 @@ public class BookingCreationService {
 
     private final IdempotencyService idempotencyService;
     private final JsonMapper jsonMapper;
-    private final RequestContext requestContext;
+    private final BookingRequestContext requestContext;
+
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     @Retryable(includes = PessimisticLockingFailureException.class, maxRetries = 3)
     @BusinessMetric(name = "business.booking.attempt")
     public BookingResponse createBooking(CreateBookingRequest request, UUID userId, UUID idempotencyKey) {
-        showtimeRepository.findTheaterIdById(request.showtimeId())
-                .ifPresent(requestContext::setTheaterId);
+        setTheaterContext(request.showtimeId());
 
         String requestHash = generateRequestHash(request, userId);
-
-        boolean isLockAcquired = idempotencyService.lock(idempotencyKey, userId, requestHash);
-
-        if (!isLockAcquired) {
+        if (!idempotencyService.lock(idempotencyKey, userId, requestHash)) {
             return handleIdempotencyHit(idempotencyKey);
         }
 
-        List<UUID> sortedSeatIds = request.seatIds().stream()
-                .sorted()
-                .toList();
+        List<Seat> lockedSeats = reserveSeats(request);
+        Showtime showtime = verifyShowtime(request.showtimeId());
+        User user = verifyUser(userId);
 
+        Booking booking = createAndSaveBooking(user, showtime);
+        List<BookingSeat> bookingSeats = createAndSaveBookingSeats(booking, lockedSeats);
+        
+        BigDecimal totalAmount = calculateTotalAmount(bookingSeats);
+        Payment payment = createPendingPayment(booking, totalAmount);
+
+        BookingResponse response = BookingResponse.fromEntity(booking, bookingSeats, payment);
+        saveIdempotencyResponse(idempotencyKey, response);
+
+        return response;
+    }
+
+    private void setTheaterContext(UUID showtimeId) {
+         showtimeRepository.findTheaterIdById(showtimeId)
+                 .ifPresent(requestContext::setTheaterId);
+    }
+
+    private List<Seat> reserveSeats(CreateBookingRequest request) {
+        List<UUID> sortedSeatIds = request.seatIds().stream().sorted().toList();
         List<Seat> lockedSeats = seatRepository.lockSeats(sortedSeatIds);
-
         validateSeats(sortedSeatIds, lockedSeats, request.showtimeId());
+        // Update status to HELD
+        lockedSeats.forEach(seat -> seat.setStatus(SeatStatus.HELD));
+        return seatRepository.saveAll(lockedSeats);
+    }
 
-        Showtime showtime = showtimeRepository.findById(request.showtimeId())
-                .orElseThrow(() -> new ShowtimeNotFoundException(request.showtimeId()));
-
+    private Showtime verifyShowtime(UUID showtimeId) {
+        Showtime showtime = showtimeRepository.findById(showtimeId)
+                .orElseThrow(() -> new ShowtimeNotFoundException(showtimeId));
+        
+        // Context might depend on loaded showtime if not set earlier, but we set it from repo query
         requestContext.setTheaterId(showtime.getScreen().getTheater().getId());
-
         showtime.checkBookable();
+        return showtime;
+    }
 
-        User user = userRepository.findById(userId)
+    private User verifyUser(UUID userId) {
+        return userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(
                         "User not found",
                         "USER_NOT_FOUND",
                         HttpStatus.NOT_FOUND,
                         Map.of("userId", userId)));
+    }
 
+    private Booking createAndSaveBooking(User user, Showtime showtime) {
         Instant now = Instant.now();
         Instant expiresAt = now.plus(bookingProperties.lockDurationMinutes(), ChronoUnit.MINUTES);
 
@@ -110,30 +135,23 @@ public class BookingCreationService {
         booking.setShowtime(showtime);
         booking.setStatus(BookingStatus.HELD);
         booking.setLockedUntil(expiresAt);
-        booking = bookingRepository.save(booking);
+        return bookingRepository.save(booking);
+    }
 
-        BigDecimal totalAmount = BigDecimal.ZERO;
+    private List<BookingSeat> createAndSaveBookingSeats(Booking booking, List<Seat> seats) {
         List<BookingSeat> bookingSeats = new ArrayList<>();
-
-        for (Seat seat : lockedSeats) {
-            seat.setStatus(SeatStatus.HELD);
-
+        for (Seat seat : seats) {
             BigDecimal seatPrice = calculatePrice(seat);
-            totalAmount = totalAmount.add(seatPrice);
-
             BookingSeat bookingSeat = new BookingSeat(booking, seat, seatPrice);
             bookingSeats.add(bookingSeat);
         }
+        return bookingSeatRepository.saveAll(bookingSeats);
+    }
 
-        seatRepository.saveAll(lockedSeats);
-        bookingSeatRepository.saveAll(bookingSeats);
-
-        Payment payment = createPendingPayment(booking, totalAmount);
-
-        BookingResponse response = BookingResponse.fromEntity(booking, bookingSeats, payment);
-
-        saveIdempotencyResponse(idempotencyKey, response);
-        return response;
+    private BigDecimal calculateTotalAmount(List<BookingSeat> bookingSeats) {
+        return bookingSeats.stream()
+                .map(BookingSeat::getPriceAtBooking)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private void saveIdempotencyResponse(UUID idempotencyKey, BookingResponse response) {
@@ -198,10 +216,10 @@ public class BookingCreationService {
         }
     }
 
-    // ... (rest of helper methods: calculatePrice, createPendingPayment,
-    // validateSeats remain unchanged)
     private BigDecimal calculatePrice(Seat seat) {
-        return bookingProperties.defaultBasePrice().multiply(seat.getTier().getPriceMultiplier());
+        return bookingProperties.defaultBasePrice()
+                .multiply(seat.getTier().getPriceMultiplier())
+                .setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     private Payment createPendingPayment(Booking booking, BigDecimal amount) {
@@ -245,3 +263,4 @@ public class BookingCreationService {
         }
     }
 }
+

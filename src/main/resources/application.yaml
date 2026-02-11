@@ -5,22 +5,6 @@ spring:
   application:
     name: TicketLedger
   
-  # mvc:
-  #   servlet:
-  #     path: "/api"
-  #   log-request-details: true
-  #   apiversion:
-  #     supported:
-  #     - "v1"
-  #     use:
-  #       path-segment: 2   # Index 2 for version in URL: /api/v1/auth/register
-  #     required: true
-     
-  #     detect-supported: true  # Auto-detect versions from @RequestMapping annotations
-
-
-      
-  
   main:
     banner-mode: "off"
 
@@ -47,8 +31,13 @@ spring:
     baseline-on-migrate: true
     locations: "classpath:db/migration"
 
+admin:
+  system-user-id: "00000000-0000-0000-0000-000000000000"
+  reconciliation:
+    threshold-seconds: 60
+    max-batch-size: 50
+
 logging:
   pattern:
     # Use 'console' to define the full log line format
     console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr([${spring.application.name:ticket-ledger},%X{traceId:-},%X{spanId:-}]){yellow} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"
-
