@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.0.1'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'com.github.ben-manes.versions' version '0.53.0'
 }
 
 group = 'com.ticketledger'
@@ -14,17 +15,18 @@ java {
 	}
 }
 
+repositories {
+	mavenCentral()
+}
+
 configurations {
 	compileOnly {
 		extendsFrom annotationProcessor
 	}
 }
 
-repositories {
-	mavenCentral()
-}
-
 dependencies {
+
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
@@ -32,50 +34,72 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-json'
-	implementation 'io.micrometer:micrometer-registry-prometheus'
 
-	implementation 'org.flywaydb:flyway-database-postgresql'
-	implementation 'com.fasterxml.uuid:java-uuid-generator:5.2.0'
+	implementation 'io.micrometer:micrometer-registry-prometheus'
+	implementation libs.micrometer.tracing
+
+	implementation libs.flyway.postgres
+	implementation libs.uuid
 
 	implementation 'org.springframework.boot:spring-boot-starter-aspectj'
-	implementation 'io.micrometer:micrometer-tracing-bridge-brave:1.6.2'
 
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-	developmentOnly 'me.paulschwarz:springboot4-dotenv:5.1.0'
+	developmentOnly libs.dotenv
 
-	implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
-	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
-	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
+	implementation libs.jjwt.api
+	runtimeOnly libs.jjwt.impl
+	runtimeOnly libs.jjwt.jackson
 
-	implementation 'net.javacrumbs.shedlock:shedlock-spring:7.6.0'
-	implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:7.6.0'
+	implementation libs.shedlock.spring
+	implementation libs.shedlock.jdbc
 
-	implementation 'com.stripe:stripe-java:31.2.0'
+	implementation libs.stripe
 
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'org.postgresql:postgresql'
+
 	annotationProcessor 'org.projectlombok:lombok'
+
 	testCompileOnly 'org.projectlombok:lombok'
 	testAnnotationProcessor 'org.projectlombok:lombok'
+
 	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
 	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
 	testImplementation 'org.testcontainers:testcontainers-postgresql'
-	testImplementation 'org.mockito:mockito-core:5.15.2'
-	testImplementation 'org.mockito:mockito-junit-jupiter:5.15.2'
-	testImplementation 'org.awaitility:awaitility:4.2.2'
+
+	testImplementation libs.mockito.core
+	testImplementation libs.mockito.junit
+	testImplementation libs.awaitility
+
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
 tasks.withType(JavaCompile).configureEach {
-	
 	options.compilerArgs << '-parameters'
+}
+
+import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
+
+def isNonStable = { String version ->
+    def stableKeyword = ['RELEASE', 'FINAL', 'GA'].any { version.toUpperCase().contains(it) }
+    def regex = /^[0-9,.v-]+(-r)?$/
+    return !stableKeyword && !(version ==~ regex)
+}
+
+tasks.named("dependencyUpdates", DependencyUpdatesTask).configure {
+
+    rejectVersionIf {
+        isNonStable(candidate.version) && !isNonStable(currentVersion)
+    }
 }

@@ -1,0 +1,39 @@
+[versions]
+
+spring-boot = "4.0.1"
+dependency-management = "1.1.7"
+
+jjwt = "0.13.0"
+stripe = "31.2.0"
+uuid = "5.2.0"
+shedlock = "7.6.0"
+micrometer-tracing = "1.6.2"
+dotenv = "5.1.0"
+
+mockito = "5.15.2"
+awaitility = "4.3.0"
+flyway = "12.1.0"
+
+[libraries]
+
+uuid = { module = "com.fasterxml.uuid:java-uuid-generator", version.ref = "uuid" }
+
+jjwt-api = { module = "io.jsonwebtoken:jjwt-api", version.ref = "jjwt" }
+jjwt-impl = { module = "io.jsonwebtoken:jjwt-impl", version.ref = "jjwt" }
+jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
+
+shedlock-spring = { module = "net.javacrumbs.shedlock:shedlock-spring", version.ref = "shedlock" }
+shedlock-jdbc = { module = "net.javacrumbs.shedlock:shedlock-provider-jdbc-template", version.ref = "shedlock" }
+
+stripe = { module = "com.stripe:stripe-java", version.ref = "stripe" }
+
+micrometer-tracing = { module = "io.micrometer:micrometer-tracing-bridge-brave", version.ref = "micrometer-tracing" }
+
+dotenv = { module = "me.paulschwarz:springboot4-dotenv", version.ref = "dotenv" }
+
+flyway-postgres = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
+
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
+mockito-junit = { module = "org.mockito:mockito-junit-jupiter", version.ref = "mockito" }
+
+awaitility = { module = "org.awaitility:awaitility", version.ref = "awaitility" }
