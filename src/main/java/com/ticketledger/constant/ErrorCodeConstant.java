@@ -19,6 +19,7 @@ public final class ErrorCodeConstant {
     public static final String NOT_ACCEPTABLE = "NOT_ACCEPTABLE";
 
     public static final String INVALID_STATUS_TRANSITION = "INVALID_STATUS_TRANSITION";
+    public static final String INVALID_WEBHOOK_SIGNATURE = "INVALID_WEBHOOK_SIGNATURE";
     public static final String PAYMENT_GATEWAY_ERROR = "PAYMENT_GATEWAY_ERROR";
     public static final String PAYMENT_GATEWAY_PERMANENT_ERROR = "PAYMENT_GATEWAY_PERMANENT_ERROR";
     public static final String INVALID_PROVIDER_ID = "INVALID_PROVIDER_ID";

@@ -129,13 +129,14 @@ Business rule violations or invalid requests.
 
 #### Payment Errors
 
-| Code                 | HTTP Status | Message                                 | Context Fields              | When Triggered         |
-| -------------------- | ----------- | --------------------------------------- | --------------------------- | ---------------------- |
-| `PAYMENT_DECLINED`   | 402         | Payment was declined by the gateway.    | `provider`, `declineReason` | Card declined          |
-| `PAYMENT_FAILED`     | 402         | Payment processing failed.              | `provider`, `failureReason` | Gateway error          |
-| `PAYMENT_PENDING`    | 402         | Payment is still being processed.       | `paymentId`, `status`       | Premature confirmation |
-| `REFUND_FAILED`      | 500         | Refund could not be processed.          | `paymentId`, `reason`       | Gateway refund error   |
-| `REFUND_NOT_ALLOWED` | 400         | Refund is not allowed for this payment. | `paymentStatus`             | Payment not SUCCESS    |
+| Code                        | HTTP Status | Message                                 | Context Fields              | When Triggered                     |
+| --------------------------- | ----------- | --------------------------------------- | --------------------------- | ---------------------------------- |
+| `PAYMENT_DECLINED`          | 402         | Payment was declined by the gateway.    | `provider`, `declineReason` | Card declined                      |
+| `PAYMENT_FAILED`            | 402         | Payment processing failed.              | `provider`, `failureReason` | Gateway error                      |
+| `PAYMENT_PENDING`           | 402         | Payment is still being processed.       | `paymentId`, `status`       | Premature confirmation             |
+| `INVALID_WEBHOOK_SIGNATURE` | 400         | Webhook signature verification failed.  | -                           | Invalid/missing provider signature |
+| `REFUND_FAILED`             | 500         | Refund could not be processed.          | `paymentId`, `reason`       | Gateway refund error               |
+| `REFUND_NOT_ALLOWED`        | 400         | Refund is not allowed for this payment. | `paymentStatus`             | Payment not SUCCESS                |
 
 **Example:**
 ```json
@@ -342,17 +343,17 @@ function getLocalizedError(error, locale = 'en') {
 
 ### Specific Status Codes
 
-| Status                      | Category                       | Example Codes                                                      |
-| --------------------------- | ------------------------------ | ------------------------------------------------------------------ |
-| `400 Bad Request`           | Validation error               | `INVALID_REQUEST`, `SHOWTIME_CLOSED`, `MAX_SEATS_EXCEEDED`         |
-| `401 Unauthorized`          | Authentication missing/invalid | `UNAUTHORIZED`, `TOKEN_EXPIRED`                                    |
-| `402 Payment Required`      | Payment issue                  | `PAYMENT_DECLINED`, `PAYMENT_FAILED`                               |
-| `403 Forbidden`             | Authorization failed           | `FORBIDDEN`, `USER_NOT_VERIFIED`                                   |
-| `404 Not Found`             | Resource doesn't exist         | `BOOKING_NOT_FOUND`, `SHOWTIME_NOT_FOUND`                          |
-| `409 Conflict`              | Business rule violation        | `SEAT_ALREADY_BOOKED`, `IDEMPOTENCY_CONFLICT`, `ALREADY_CANCELLED` |
-| `422 Unprocessable Entity`  | Semantic error                 | `BOOKING_EXPIRED` (rare, prefer 400)                               |
-| `500 Internal Server Error` | Unhandled exception            | `INTERNAL_ERROR`, `DATABASE_ERROR`                                 |
-| `503 Service Unavailable`   | Temporary outage               | `DOWNSTREAM_TIMEOUT`, `SERVICE_UNAVAILABLE`                        |
+| Status                      | Category                              | Example Codes                                                                           |
+| --------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------- |
+| `400 Bad Request`           | Validation or invalid webhook request | `INVALID_REQUEST`, `SHOWTIME_CLOSED`, `MAX_SEATS_EXCEEDED`, `INVALID_WEBHOOK_SIGNATURE` |
+| `401 Unauthorized`          | Authentication missing/invalid        | `UNAUTHORIZED`, `TOKEN_EXPIRED`                                                         |
+| `402 Payment Required`      | Payment issue                         | `PAYMENT_DECLINED`, `PAYMENT_FAILED`                                                    |
+| `403 Forbidden`             | Authorization failed                  | `FORBIDDEN`, `USER_NOT_VERIFIED`                                                        |
+| `404 Not Found`             | Resource doesn't exist                | `BOOKING_NOT_FOUND`, `SHOWTIME_NOT_FOUND`                                               |
+| `409 Conflict`              | Business rule violation               | `SEAT_ALREADY_BOOKED`, `IDEMPOTENCY_CONFLICT`, `ALREADY_CANCELLED`                      |
+| `422 Unprocessable Entity`  | Semantic error                        | `BOOKING_EXPIRED` (rare, prefer 400)                                                    |
+| `500 Internal Server Error` | Unhandled exception                   | `INTERNAL_ERROR`, `DATABASE_ERROR`                                                      |
+| `503 Service Unavailable`   | Temporary outage                      | `DOWNSTREAM_TIMEOUT`, `SERVICE_UNAVAILABLE`                                             |
 
 ---
 
@@ -379,6 +380,10 @@ The `context` object provides **additional data** to help users/frontend underst
 - ✅ Counts and aggregates (availableSeats, totalBookings)
 - ✅ Sanitized timing information (ISO-8601 timestamps)
 - ✅ Enum values (status codes, categories)
+
+**Webhook Signature Rule:**
+- For `INVALID_WEBHOOK_SIGNATURE`, `error.context` must remain empty.
+- Never include provided signature snippets, canonical payload substrings, timestamp tolerance values, or any verifier internals.
 
 **Example - BAD (Security Violation):**
 ```json

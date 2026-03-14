@@ -8,10 +8,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * keys and webhook secrets.
  */
 
-@ConfigurationProperties(prefix = "stripe")
+@ConfigurationProperties(prefix = "ticketledger.payment.stripe")
 public record StripeProperties(
-        String secretKey,
-        String webhookSecret,
-        String currency,
-        String adminAlertEmail) {
+                String secretKey,
+                Webhook webhook,
+                String currency,
+                String adminAlertEmail) {
+
+        public record Webhook(
+                        String secret) {
+        }
 }

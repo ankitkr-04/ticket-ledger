@@ -4,8 +4,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -21,7 +19,6 @@ import com.ticketledger.domain.enums.BookingStatus;
 import com.ticketledger.domain.enums.PaymentStatus;
 import com.ticketledger.domain.enums.SeatStatus;
 import com.ticketledger.domain.event.BookingConfirmedEvent;
-
 import com.ticketledger.domain.repository.BookingRepository;
 import com.ticketledger.domain.repository.BookingSeatRepository;
 import com.ticketledger.domain.repository.PaymentRepository;

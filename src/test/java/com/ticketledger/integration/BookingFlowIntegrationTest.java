@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +18,11 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.utility.TestcontainersConfiguration;
 
+import com.ticketledger.domain.entity.Booking;
+import com.ticketledger.domain.enums.BookingStatus;
+import com.ticketledger.domain.enums.PaymentStatus;
+import com.ticketledger.domain.repository.BookingRepository;
+import com.ticketledger.domain.repository.PaymentRepository;
 import com.ticketledger.dto.ApiResponse;
 import com.ticketledger.dto.AuthResponse;
 import com.ticketledger.dto.BookingResponse;
@@ -26,7 +32,6 @@ import com.ticketledger.dto.RefreshTokenRequest;
 import com.ticketledger.dto.RegisterRequest;
 
 import io.micrometer.core.instrument.MeterRegistry;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Integration test covering the complete booking flow:
@@ -47,10 +52,13 @@ class BookingFlowIntegrationTest {
         private RestTestClient restClient;
 
         @Autowired
-        private JsonMapper objectMapper;
+        private MeterRegistry meterRegistry;
 
         @Autowired
-        private MeterRegistry meterRegistry;
+        private BookingRepository bookingRepository;
+
+        @Autowired
+        private PaymentRepository paymentRepository;
 
         // IDs from seed_test_data.sql
         private static final String THEATER_ID = "01937b5c-a000-7000-8000-000000000001";
@@ -154,6 +162,44 @@ class BookingFlowIntegrationTest {
                 assertThat(booking.amount()).isNotNull();
                 assertThat(booking.amount().total()).isPositive();
                 assertThat(booking.amount().currency()).isEqualTo("INR");
+
+                // ==================== STEP 4: PROCESS WEBHOOK ====================
+                String webhookPayload = """
+                                {
+                                        "type": "payment_intent.succeeded",
+                                        "data": {
+                                                "object": {
+                                                        "id": "pi_test_%s",
+                                                        "metadata": {
+                                                                "paymentId": "%s"
+                                                        }
+                                                }
+                                        }
+                                }
+                                """.formatted(booking.payment().paymentId(), booking.payment().paymentId());
+
+                restClient.post()
+                                .uri("/api/v1/webhooks/payment")
+                                .header("Stripe-Signature", "test-signature")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(webhookPayload)
+                                .exchange()
+                                .expectStatus().isOk();
+
+                assertThat(bookingRepository.findById(booking.bookingId()))
+                                .isPresent()
+                                .get()
+                                .extracting((Function<? super Booking, BookingStatus>) Booking::getStatus)
+                                .isEqualTo(BookingStatus.CONFIRMED);
+
+                assertThat(paymentRepository.findById(booking.payment().paymentId()))
+                                .isPresent()
+                                .get()
+                                .satisfies(savedPayment -> {
+                                        assertThat(savedPayment.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
+                                        assertThat(savedPayment.getProviderCapturedAt()).isNotNull();
+                                });
+
                 // Retry with same idempotency key should return same booking
                 ApiResponse<BookingResponse> idempotentResponse = restClient.post()
                                 .uri("/api/v1/bookings")
@@ -342,7 +388,8 @@ class BookingFlowIntegrationTest {
                                 .expectStatus().is5xxServerError(); // Should fail with revoked token
         }
 
-        private void assertMetricCount(String name, String status, String reason, String theaterId, long expectedCount) {
+        private void assertMetricCount(String name, String status, String reason, String theaterId,
+                        long expectedCount) {
                 String expectedTheaterTag = theaterId == null ? GLOBAL_THEATER_TAG : theaterId;
                 double count = meterRegistry.counter(name, "status", status, "reason", reason, "theater_id",
                                 expectedTheaterTag)

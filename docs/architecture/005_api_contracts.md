@@ -2,7 +2,7 @@
 
 ## 📋 Purpose
 
-This document defines the **HTTP API contracts** for TicketLedger. It serves as the **interface specification** between frontend and backend systems.
+This document defines the **HTTP API contracts** for TicketLedger. It serves as the **interface specification** between frontend/backend clients and external provider integrations.
 
 ### ✅ This file contains:
 - REST endpoint definitions
@@ -189,6 +189,85 @@ GET /api/v1/bookings?page=0&size=20
   }
 }
 ```
+
+---
+
+## � Authentication Endpoints
+
+## 🔔 Provider Webhook Contracts (Inbound)
+
+Webhook endpoints are **provider-initiated inbound callbacks** and are intentionally documented outside customer-facing frontend APIs.
+
+### Contract Rules for Inbound Webhooks
+
+- Producer: Payment provider (for example, Stripe)
+- Consumer: TicketLedger backend
+- Authentication: Signature verification header (not JWT)
+- Idempotency: Not driven by `Idempotency-Key`; provider event identity/signature governs replay handling
+- Response envelope: Same global success/error envelope used by all APIs
+
+### 1. Payment Webhook
+
+**Endpoint:** `POST /webhooks/payment`
+
+**Purpose:** Receive gateway payment events and update booking/payment state asynchronously.
+
+**Headers:**
+```http
+Stripe-Signature: t=1710000000,v1=<provider-signature>
+Content-Type: application/json; charset=UTF-8
+```
+
+**Encoding Contract:**
+- Controller reads raw request bytes (`byte[]`) from the HTTP body
+- Payload string is decoded using charset from request `Content-Type`
+- If charset is absent or invalid, backend defaults to UTF-8
+
+**Request Body (Stripe-style payload excerpt):**
+```json
+{
+  "type": "payment_intent.succeeded",
+  "data": {
+    "object": {
+      "id": "pi_3ABC123",
+      "metadata": {
+        "paymentId": "019535d9-3df7-79fb-b466-fa907fa17f9e"
+      }
+    }
+  }
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": null,
+  "meta": {
+    "timestamp": "2026-01-18T10:35:00Z",
+    "requestId": "req-webhook-001"
+  }
+}
+```
+
+**Error Responses:**
+
+| Status | Error Code                  | Description                                                     |
+| ------ | --------------------------- | --------------------------------------------------------------- |
+| `400`  | `INVALID_WEBHOOK_SIGNATURE` | Signature verification failed (opaque; no verification details) |
+| `400`  | `MALFORMED_REQUEST`         | Body is not valid JSON/request body cannot be parsed            |
+
+**Security Notes:**
+- For `INVALID_WEBHOOK_SIGNATURE`, keep `error.context` empty to avoid leaking verification details.
+- Do not echo back signature fragments, canonical payload content, or secret-hinting metadata.
+
+**Transaction Boundary:**
+- Signature verification and payload parsing happen before database transaction starts.
+- Database transaction starts inside payment webhook processing service (`processPaymentWebhook`) when dispatching parsed event.
+
+**Testing Contract (test profile):**
+- `test` profile uses `TestWebhookAdapter` to parse raw JSON into `PaymentWebhookRequest` without Stripe SDK signature verification.
+- Integration tests must still provide `Stripe-Signature` header to satisfy request contract.
 
 ---
 
@@ -1201,5 +1280,6 @@ public BookingResponse getBooking(@PathVariable UUID id) {
 - [x] Token lifecycle and rotation strategy documented
 - [x] Error responses defined
 - [x] Security guidelines established
+- [x] Inbound webhook provider contract documented separately from frontend APIs
 - [x] Admin endpoints moved to separate Control Plane doc (08)
 - [x] 423 LOCKED status code added for concurrency conflicts
